@@ -40,6 +40,29 @@
 
     <ul id="dailyList" class="list"></ul>
 
+    <div class="card">
+  <h3>学習時間（今日）</h3>
+  <div class="row">
+    <span id="todayMinutes" class="badge"></span>
+    <span id="timerDisplay" class="badge">00:00:00</span>
+  </div>
+
+  <div class="row">
+    <button class="btn tiny" onclick="timerStart()">Start</button>
+    <button class="btn tiny secondary" onclick="timerPause()">Pause</button>
+    <button class="btn tiny secondary" onclick="timerStop()">Stop & 記録</button>
+    <button class="btn tiny secondary" onclick="timerReset()">Reset</button>
+  </div>
+
+  <div class="row">
+    <button class="btn tiny secondary" onclick="addMinutes(15)">+15分</button>
+    <button class="btn tiny secondary" onclick="addMinutes(30)">+30分</button>
+    <button class="btn tiny secondary" onclick="addMinutes(60)">+60分</button>
+  </div>
+
+  <p class="muted">※Stopで「今日の合計分」に加算されます（タスク別では記録しません）</p>
+</div>
+
     <div class="row">
       <button class="btn" onclick="addTask('daily')">＋ タスク追加</button>
       <button class="btn secondary" onclick="clearDone('daily')">完了を整理</button>
