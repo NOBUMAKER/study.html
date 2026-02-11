@@ -347,24 +347,26 @@ function timerReset(){
 }
 
 function timerStop(){
-  // Stop & record
   if(timerRunning){
     timerAccumMs += (performance.now() - timerStartedAt);
     timerRunning = false;
     timerStartedAt = null;
   }
   const mins = Math.round(timerAccumMs / 60000);
+  const key = selectedDayKey || todayKey;
+
   if(mins > 0){
     store.dailyTime ||= {};
-    store.dailyTime[selectedDayKey] = (store.dailyTime[selectedDayKey] || 0) + mins;
+    store.dailyTime[key] = (store.dailyTime[key] || 0) + mins;
   }
   timerReset();
-  save(); // render()も走る
+  save();
 }
 
 function addMinutes(mins){
+  const key = selectedDayKey || todayKey;
   store.dailyTime ||= {};
-  store.dailyTime[selectedDayKey] = (store.dailyTime[selectedDayKey] || 0) + mins;
+  store.dailyTime[key] = (store.dailyTime[key] || 0) + mins;
   save();
 }
 
