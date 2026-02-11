@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Study Log</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="tabs">
+    <button id="tabDaily" class="tab active" onclick="show('daily')">今日</button>
+    <button id="tabWeekly" class="tab" onclick="show('weekly')">今週</button>
+    <button id="tabHistory" class="tab" onclick="show('history')">履歴</button>
+  </div>
+</header>
+
+<main class="container">
+  <!-- 日次 -->
+  <section id="daily">
+    <div class="row">
+      <h2 id="dailyTitle">今日</h2>
+      <div class="meta">
+        <span id="dailyDate"></span>
+        <span id="dailyRate" class="badge"></span>
+      </div>
+    </div>
+
+    <ul id="dailyList" class="list"></ul>
+
+    <div class="row">
+      <button class="btn" onclick="addTask('daily')">＋ タスク追加</button>
+      <button class="btn secondary" onclick="clearDone('daily')">完了を整理</button>
+    </div>
+
+    <div class="card">
+      <h3>リマインド</h3>
+      <p class="muted">夜に開いたとき自動で促す＋必要なら通知許可もできます。</p>
+      <div class="row">
+        <button class="btn secondary" onclick="requestNotif()">通知を許可</button>
+        <button class="btn secondary" onclick="testNotif()">通知テスト</button>
+      </div>
+      <p id="notifStatus" class="muted"></p>
+    </div>
+  </section>
+
+  <!-- 週次 -->
+  <section id="weekly" hidden>
+    <div class="row">
+      <h2>週次</h2>
+      <div class="meta">
+        <span id="weekLabel"></span>
+        <span id="weeklyRate" class="badge"></span>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn tiny" onclick="shiftWeek(-1)">◀ 前週</button>
+      <button class="btn tiny secondary" onclick="goThisWeek()">今週</button>
+      <button class="btn tiny" onclick="shiftWeek(1)">次週 ▶</button>
+    </div>
+
+    <ul id="weeklyList" class="list"></ul>
+
+    <div class="row">
+      <button class="btn" onclick="addTask('weekly')">＋ 週次タスク追加</button>
+      <button class="btn secondary" onclick="clearDone('weekly')">完了を整理</button>
+    </div>
+
+    <p class="muted">※過去週に移動しても編集できます（自分用なので柔軟に）。</p>
+  </section>
+
+  <!-- 履歴 -->
+  <section id="history" hidden>
+    <div class="row">
+      <h2>履歴</h2>
+      <div class="meta">
+        <span class="muted">週次＆日次の達成率を見返せます</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>週の履歴</h3>
+      <ul id="historyWeeks" class="list"></ul>
+    </div>
+
+    <div class="card">
+      <h3>日次の履歴（直近14日）</h3>
+      <ul id="historyDays" class="list"></ul>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
