@@ -5,6 +5,7 @@ const TYPES = ["講義","演習","復習","模試","その他"];
 const store = JSON.parse(localStorage.getItem(KEY)) || {
   daily: {},   // "YYYY-MM-DD": [{text, done, type}]
   weekly: {}   // "MONDAY_YYYY-MM-DD": { tasks: [{text, done, type}] }
+  dailyTime: {} // ★ 追加： "YYYY-MM-DD": minutes
 };
 
 function save() {
@@ -471,7 +472,11 @@ function render(){
   document.getElementById("dailyDate").textContent = selectedDayKey;
   const daily = store.daily[selectedDayKey] || [];
   const dr = rateOf(daily);
-  document.getElementById("dailyRate").textContent = dr===null ? "" : `達成率 ${dr}%`;
+  document.getElementById("dailyRate").textContent = dr===null ? "" : `達成率 ${dr}%`
+  // 今日の学習時間（分）表示
+const mins = (store.dailyTime && store.dailyTime[selectedDayKey]) ? store.dailyTime[selectedDayKey] : 0;
+const tm = document.getElementById("todayMinutes");
+if(tm) tm.textContent = `学習時間 ${mins}分`;
 
   // streak
   const streak = calcStreak();
@@ -593,6 +598,82 @@ function render(){
   if(open === "calendar") show("calendar");
   if(open === "analytics") show("analytics");
   if(open === "daily") show("daily");
+
+  // ===== Study Time (daily total) =====
+let timerRunning = false;
+let timerStartedAt = null;   // performance.now() 기준
+let timerAccumMs = 0;        // pause分も含めて積算
+let timerIntervalId = null;
+
+function fmtTime(ms){
+  const total = Math.floor(ms / 1000);
+  const h = String(Math.floor(total / 3600)).padStart(2,"0");
+  const m = String(Math.floor((total % 3600) / 60)).padStart(2,"0");
+  const s = String(total % 60).padStart(2,"0");
+  return `${h}:${m}:${s}`;
+}
+
+function updateTimerUI(){
+  const el = document.getElementById("timerDisplay");
+  if(!el) return;
+  const ms = timerAccumMs + (timerRunning ? (performance.now() - timerStartedAt) : 0);
+  el.textContent = fmtTime(ms);
+}
+
+function timerStart(){
+  if(timerRunning) return;
+  timerRunning = true;
+  timerStartedAt = performance.now();
+  if(timerIntervalId) clearInterval(timerIntervalId);
+  timerIntervalId = setInterval(updateTimerUI, 250);
+  updateTimerUI();
+}
+
+function timerPause(){
+  if(!timerRunning) return;
+  timerAccumMs += (performance.now() - timerStartedAt);
+  timerRunning = false;
+  timerStartedAt = null;
+  updateTimerUI();
+}
+
+function timerReset(){
+  timerRunning = false;
+  timerStartedAt = null;
+  timerAccumMs = 0;
+  if(timerIntervalId) clearInterval(timerIntervalId);
+  timerIntervalId = null;
+  updateTimerUI();
+}
+
+function timerStop(){
+  // Stop & record
+  if(timerRunning){
+    timerAccumMs += (performance.now() - timerStartedAt);
+    timerRunning = false;
+    timerStartedAt = null;
+  }
+  const mins = Math.round(timerAccumMs / 60000);
+  if(mins > 0){
+    store.dailyTime ||= {};
+    store.dailyTime[selectedDayKey] = (store.dailyTime[selectedDayKey] || 0) + mins;
+  }
+  timerReset();
+  save(); // render()も走る
+}
+
+function addMinutes(mins){
+  store.dailyTime ||= {};
+  store.dailyTime[selectedDayKey] = (store.dailyTime[selectedDayKey] || 0) + mins;
+  save();
+}
+
+// HTMLから呼べるように
+window.timerStart = timerStart;
+window.timerPause = timerPause;
+window.timerStop = timerStop;
+window.timerReset = timerReset;
+window.addMinutes = addMinutes;
 })();
 
 // ===== PWA =====
