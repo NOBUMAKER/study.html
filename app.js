@@ -578,120 +578,116 @@ function renderCalendar(){
 }
 
 // ===== Render =====
+
 function render(){
   // Daily
   document.getElementById("dailyDate").textContent = selectedDayKey;
   const daily = store.daily[selectedDayKey] || [];
   const dr = rateOf(daily);
   document.getElementById("dailyRate").textContent = dr===null ? "" : `達成率 ${dr}%`;
-  // 今日の学習時間（分）表示
-const mins = (store.dailyTime && store.dailyTime[selectedDayKey]) ? store.dailyTime[selectedDayKey] : 0;
-const tm = document.getElementById("todayMinutes");
-if(tm) tm.textContent = `学習時間 ${mins}分`;
 
-  // streak
+  const mins = (store.dailyTime && store.dailyTime[selectedDayKey]) ? store.dailyTime[selectedDayKey] : 0;
+  const tm = document.getElementById("todayMinutes");
+  if(tm) tm.textContent = `学習時間 ${mins}分`;
+
   const streak = calcStreak();
   document.getElementById("streakBadge").textContent = streak>0 ? `🔥 ${streak}日連続` : "🔥 0日";
 
+  // 日次リスト
   const dailyList = document.getElementById("dailyList");
   dailyList.innerHTML = "";
 
   daily.forEach((t,i)=>{
-  const li = document.createElement("li");
+    const li = document.createElement("li");
 
-  // daily type chips
-renderChips(document.getElementById("dailyTypeSummary"), typeCounts(daily));
+    const left = document.createElement("span");
+    left.textContent = `【${t.type || "その他"}】 ${t.text}`;
+    if(t.done) left.className = "done";
 
-/* ===== Weekly（ここから）===== */
-store.weekly[selectedWeekKey] ||= { tasks: [] };
-const weekly = store.weekly[selectedWeekKey].tasks || [];
-document.getElementById("weekLabel").textContent = `週: ${weekRangeLabel(selectedWeekKey)}`;
-const wr = rateOf(weekly);
-document.getElementById("weeklyRate").textContent = wr===null ? "" : `達成率 ${wr}%`;
+    const right = document.createElement("span");
+    right.textContent = t.done ? "〇" : "";
 
-const weeklyList = document.getElementById("weeklyList");
-weeklyList.innerHTML = "";
+    li.appendChild(left);
+    li.appendChild(right);
 
-weekly.forEach((t,i)=>{
-  const li = document.createElement("li");
+    // 短押し＝完了切替 / 長押し＝削除
+    let pressTimer = null;
+    let longPressed = false;
 
-  const left = document.createElement("span");
-  left.textContent = `【${t.type || "その他"}】 ${t.text}`;
-  if(t.done) left.className = "done";
+    li.addEventListener("pointerdown", ()=>{
+      longPressed = false;
+      pressTimer = setTimeout(()=>{
+        longPressed = true;
+        deleteTask("daily", i);
+      }, 600);
+    });
 
-  const right = document.createElement("span");
-  right.textContent = t.done ? "〇" : "";
+    li.addEventListener("pointerup", ()=>{
+      if(pressTimer) clearTimeout(pressTimer);
+      if(!longPressed) toggle("daily", i);
+    });
 
-  li.appendChild(left);
-  li.appendChild(right);
+    li.addEventListener("pointerleave", ()=>{
+      if(pressTimer) clearTimeout(pressTimer);
+    });
 
-  // 短押し＝完了切替 / 長押し＝削除
-  let pressTimer = null;
-  let longPressed = false;
-
-  li.addEventListener("pointerdown", ()=>{
-    longPressed = false;
-    pressTimer = setTimeout(()=>{
-      longPressed = true;
-      deleteTask("weekly", i);
-    }, 600);
+    dailyList.appendChild(li);
   });
 
-  li.addEventListener("pointerup", ()=>{
-    if(pressTimer) clearTimeout(pressTimer);
-    if(!longPressed) toggle("weekly", i);
+  // daily type chips（←ここ！forEachの外）
+  renderChips(document.getElementById("dailyTypeSummary"), typeCounts(daily));
+
+  /* ===== Weekly ===== */
+  store.weekly[selectedWeekKey] ||= { tasks: [] };
+  const weekly = store.weekly[selectedWeekKey].tasks || [];
+  document.getElementById("weekLabel").textContent = `週: ${weekRangeLabel(selectedWeekKey)}`;
+  const wr = rateOf(weekly);
+  document.getElementById("weeklyRate").textContent = wr===null ? "" : `達成率 ${wr}%`;
+
+  const weeklyList = document.getElementById("weeklyList");
+  weeklyList.innerHTML = "";
+
+  weekly.forEach((t,i)=>{
+    const li = document.createElement("li");
+
+    const left = document.createElement("span");
+    left.textContent = `【${t.type || "その他"}】 ${t.text}`;
+    if(t.done) left.className = "done";
+
+    const right = document.createElement("span");
+    right.textContent = t.done ? "〇" : "";
+
+    li.appendChild(left);
+    li.appendChild(right);
+
+    // 短押し＝完了切替 / 長押し＝削除
+    let pressTimer = null;
+    let longPressed = false;
+
+    li.addEventListener("pointerdown", ()=>{
+      longPressed = false;
+      pressTimer = setTimeout(()=>{
+        longPressed = true;
+        deleteTask("weekly", i);
+      }, 600);
+    });
+
+    li.addEventListener("pointerup", ()=>{
+      if(pressTimer) clearTimeout(pressTimer);
+      if(!longPressed) toggle("weekly", i);
+    });
+
+    li.addEventListener("pointerleave", ()=>{
+      if(pressTimer) clearTimeout(pressTimer);
+    });
+
+    weeklyList.appendChild(li);
   });
 
-  li.addEventListener("pointerleave", ()=>{
-    if(pressTimer) clearTimeout(pressTimer);
-  });
-
-  weeklyList.appendChild(li);
-});
-
-renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
-/* ===== Weekly（ここまで）===== */
-
-  const left = document.createElement("span");
-  left.textContent = `【${t.type || "その他"}】 ${t.text}`;
-  if(t.done) left.className = "done";
-
-  const right = document.createElement("span");
-  right.textContent = t.done ? "〇" : "";
-
-  li.appendChild(left);
-  li.appendChild(right);
-
-  // 短押し＝完了切替 / 長押し＝削除
-  let pressTimer = null;
-  let longPressed = false;
-
-  li.addEventListener("pointerdown", ()=>{
-    longPressed = false;
-    pressTimer = setTimeout(()=>{
-      longPressed = true;
-      deleteTask("daily", i);
-    }, 600);
-  });
-
-  li.addEventListener("pointerup", ()=>{
-    if(pressTimer) clearTimeout(pressTimer);
-    if(!longPressed) toggle("daily", i);
-  });
-
-  li.addEventListener("pointerleave", ()=>{
-    if(pressTimer) clearTimeout(pressTimer);
-  });
-
-  dailyList.appendChild(li);
-});
-
-
-
+  renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
 
   // Calendar
-  renderCalendar();
-
+  renderCalendar()
   // History - weeks
   const hw = document.getElementById("historyWeeks");
   hw.innerHTML = "";
