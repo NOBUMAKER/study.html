@@ -1,8 +1,10 @@
-// ====== Storage ======
-const KEY = "study_pwa_v1";
+// ===== Storage =====
+const KEY = "study_pwa_v2";
+const TYPES = ["講義","演習","復習","模試","その他"];
+
 const store = JSON.parse(localStorage.getItem(KEY)) || {
-  daily: {},   // "YYYY-MM-DD": [{text, done}]
-  weekly: {}   // "MONDAY_YYYY-MM-DD": { tasks: [{text, done}] }
+  daily: {},   // "YYYY-MM-DD": [{text, done, type}]
+  weekly: {}   // "MONDAY_YYYY-MM-DD": { tasks: [{text, done, type}] }
 };
 
 function save() {
@@ -10,14 +12,14 @@ function save() {
   render();
 }
 
-// ====== Date utils ======
+// ===== Date utils =====
 const iso = (d) => new Date(d).toISOString().slice(0,10);
 
 function getMonday(d = new Date()) {
   const date = new Date(d);
   const day = date.getDay() || 7; // Sun=7
   if (day !== 1) date.setDate(date.getDate() - (day - 1));
-  date.setHours(12,0,0,0); // DST safety
+  date.setHours(12,0,0,0);
   return iso(date);
 }
 
@@ -25,6 +27,13 @@ function addDays(isoDate, n){
   const d = new Date(isoDate + "T12:00:00");
   d.setDate(d.getDate() + n);
   return iso(d);
+}
+
+function addMonths(d, n){
+  const x = new Date(d);
+  x.setDate(1);
+  x.setMonth(x.getMonth() + n);
+  return x;
 }
 
 function weekRangeLabel(mondayIso){
@@ -38,14 +47,31 @@ function rateOf(list){
   return Math.round(done / list.length * 100);
 }
 
-// ====== Current state ======
+function heatClass(rate){
+  if(rate === null) return "r0";
+  if(rate === 0) return "r0";
+  if(rate < 50) return "r1";
+  if(rate < 80) return "r2";
+  return "r3";
+}
+
+// ===== State =====
 const todayKey = iso(new Date());
-let selectedWeekKey = getMonday(); // for weekly view
+let selectedDayKey = todayKey;
+
+let selectedWeekKey = getMonday(); // weekly view
 store.weekly[selectedWeekKey] ||= { tasks: [] };
 
-// ====== UI helpers ======
+// calendar month state: Date object set to 1st of month
+let calMonth = new Date();
+calMonth.setDate(1);
+
+// charts
+let dailyChart, weeklyChart, typeChart;
+
+// ===== Tabs =====
 function setActiveTab(name){
-  ["Daily","Weekly","History"].forEach(x=>{
+  ["Daily","Weekly","Calendar","Analytics","History"].forEach(x=>{
     const b = document.getElementById("tab"+x);
     if(!b) return;
     b.classList.toggle("active", x.toLowerCase() === name);
@@ -55,30 +81,80 @@ function setActiveTab(name){
 function show(view){
   document.getElementById("daily").hidden = view !== "daily";
   document.getElementById("weekly").hidden = view !== "weekly";
+  document.getElementById("calendar").hidden = view !== "calendar";
+  document.getElementById("analytics").hidden = view !== "analytics";
   document.getElementById("history").hidden = view !== "history";
   setActiveTab(view);
-  // render ensures content up to date
   render();
 }
 
-// ====== Tasks ======
+// ===== Daily navigation =====
+function shiftDay(delta){
+  selectedDayKey = addDays(selectedDayKey, delta);
+  render();
+}
+function goToday(){
+  selectedDayKey = todayKey;
+  render();
+}
+
+// ===== Weekly navigation =====
+function shiftWeek(delta){
+  selectedWeekKey = addDays(selectedWeekKey, delta * 7);
+  store.weekly[selectedWeekKey] ||= { tasks: [] };
+  render();
+}
+function goThisWeek(){
+  selectedWeekKey = getMonday();
+  store.weekly[selectedWeekKey] ||= { tasks: [] };
+  render();
+}
+
+// ===== Calendar navigation =====
+function shiftMonth(delta){
+  calMonth = addMonths(calMonth, delta);
+  render();
+}
+function goThisMonth(){
+  calMonth = new Date();
+  calMonth.setDate(1);
+  render();
+}
+
+// ===== Task add/toggle =====
+function pickType(defaultType="演習"){
+  const msg =
+    "タイプを選んで番号を入力:\n" +
+    TYPES.map((t,i)=>`${i+1}) ${t}`).join("\n") +
+    `\n\n(空欄なら ${defaultType})`;
+  const raw = prompt(msg, "");
+  const n = parseInt(raw, 10);
+  if(!raw) return defaultType;
+  if(Number.isFinite(n) && n>=1 && n<=TYPES.length) return TYPES[n-1];
+  // 入力が文字でもOKにする
+  if(TYPES.includes(raw)) return raw;
+  return defaultType;
+}
+
 function addTask(type){
   const text = prompt("タスク内容");
   if(!text) return;
 
+  const taskType = pickType(type==="weekly" ? "演習" : "演習");
+
   if(type === "daily"){
-    store.daily[todayKey] ||= [];
-    store.daily[todayKey].push({ text, done:false });
+    store.daily[selectedDayKey] ||= [];
+    store.daily[selectedDayKey].push({ text, done:false, type: taskType });
   } else {
     store.weekly[selectedWeekKey] ||= { tasks: [] };
-    store.weekly[selectedWeekKey].tasks.push({ text, done:false });
+    store.weekly[selectedWeekKey].tasks.push({ text, done:false, type: taskType });
   }
   save();
 }
 
 function toggle(type, idx){
   if(type === "daily"){
-    const list = store.daily[todayKey] || [];
+    const list = store.daily[selectedDayKey] || [];
     if(!list[idx]) return;
     list[idx].done = !list[idx].done;
   } else {
@@ -92,8 +168,8 @@ function toggle(type, idx){
 function clearDone(type){
   if(!confirm("完了済みを削除しますか？")) return;
   if(type === "daily"){
-    const list = store.daily[todayKey] || [];
-    store.daily[todayKey] = list.filter(t => !t.done);
+    const list = store.daily[selectedDayKey] || [];
+    store.daily[selectedDayKey] = list.filter(t => !t.done);
   } else {
     const list = store.weekly[selectedWeekKey]?.tasks || [];
     store.weekly[selectedWeekKey].tasks = list.filter(t => !t.done);
@@ -101,57 +177,100 @@ function clearDone(type){
   save();
 }
 
-// ====== Weekly navigation ======
-function shiftWeek(delta){
-  selectedWeekKey = addDays(selectedWeekKey, delta * 7);
-  store.weekly[selectedWeekKey] ||= { tasks: [] };
-  render();
-}
-
-function goThisWeek(){
-  selectedWeekKey = getMonday();
-  store.weekly[selectedWeekKey] ||= { tasks: [] };
-  render();
-}
-
-// ====== History ======
+// ===== History helpers =====
 function listWeeksSorted(){
   const keys = Object.keys(store.weekly);
-  keys.sort(); // ISO date sorts lexicographically
+  keys.sort();
   return keys;
 }
-
 function listDaysSorted(){
   const keys = Object.keys(store.daily);
   keys.sort();
   return keys;
 }
-
 function goWeekFromHistory(weekKey){
   selectedWeekKey = weekKey;
   store.weekly[selectedWeekKey] ||= { tasks: [] };
   show("weekly");
 }
+function goDayFromCalendar(dayKey){
+  selectedDayKey = dayKey;
+  show("daily");
+}
 
-// ====== Notifications (practical) ======
-// 1) In-app reminder at night (reliable on iOS)
+// ===== Streak =====
+// 条件：達成率 >= 50% を「達成」とする（変更したければここ）
+const STREAK_THRESHOLD = 50;
+
+function calcStreak(){
+  let streak = 0;
+  let d = todayKey;
+
+  while(true){
+    const list = store.daily[d];
+    if(!list || list.length === 0) break;
+    const r = rateOf(list);
+    if(r === null || r < STREAK_THRESHOLD) break;
+    streak += 1;
+    d = addDays(d, -1);
+  }
+  return streak;
+}
+
+// ===== Type summary =====
+function typeCounts(list){
+  const counts = {};
+  TYPES.forEach(t=>counts[t]=0);
+  counts["その他"] ||= 0;
+
+  (list||[]).forEach(t=>{
+    const k = TYPES.includes(t.type) ? t.type : "その他";
+    counts[k] += 1;
+  });
+  return counts;
+}
+
+function renderChips(el, counts){
+  el.innerHTML = "";
+  Object.entries(counts).forEach(([k,v])=>{
+    if(v===0) return;
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = `${k}: ${v}`;
+    el.appendChild(chip);
+  });
+  if(el.innerHTML===""){
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = "データなし";
+    el.appendChild(chip);
+  }
+}
+
+// ===== Notifications =====
 function nightlyNudge(){
   const hour = new Date().getHours();
-  if(hour < 20) return; // 20:00-
-  const daily = store.daily[todayKey] || [];
-  if(daily.length === 0) return; // no tasks => do nothing
-  const r = rateOf(daily);
+  if(hour < 20) return;
+
+  const list = store.daily[todayKey] || [];
+  if(list.length === 0) return;
+
+  const r = rateOf(list);
   if(r === null) return;
 
-  // show only once per day
   const nudgedKey = "nudged_" + todayKey;
   if(localStorage.getItem(nudgedKey) === "1") return;
 
   localStorage.setItem(nudgedKey, "1");
-  alert(`今日の達成率は ${r}% です。未完了があれば、今のうちに回収しよう。`);
+
+  const undone = list.filter(t=>!t.done).length;
+  if(undone > 0){
+    alert(`今日は ${r}%（未完了 ${undone}）。1つだけ回収しよう。`);
+  }else{
+    alert(`今日は ${r}%！おつかれ。明日の設計も軽くやる？`);
+  }
 }
 
-// 2) Notification API (best-effort; iOS has constraints)
 async function requestNotif(){
   if(!("Notification" in window)){
     setNotifStatus("この環境は通知に対応していません。");
@@ -179,32 +298,191 @@ function setNotifStatus(msg){
   if(el) el.textContent = msg;
 }
 
-// Expose to HTML
-window.show = show;
-window.addTask = addTask;
-window.toggle = toggle;
-window.shiftWeek = shiftWeek;
-window.goThisWeek = goThisWeek;
-window.goWeekFromHistory = goWeekFromHistory;
-window.clearDone = clearDone;
-window.requestNotif = requestNotif;
-window.testNotif = testNotif;
+// ===== Charts =====
+function buildDailySeries(days=30){
+  const keys = listDaysSorted();
+  const last = keys.slice(-days);
+  const labels = [];
+  const values = [];
+  last.forEach(k=>{
+    labels.push(k.slice(5)); // MM-DD
+    const r = rateOf(store.daily[k] || []);
+    values.push(r===null ? null : r);
+  });
+  return {labels, values};
+}
 
-// ====== Render ======
+function buildWeeklySeries(weeks=10){
+  const keys = listWeeksSorted();
+  const last = keys.slice(-weeks);
+  const labels = [];
+  const values = [];
+  last.forEach(k=>{
+    labels.push(k.slice(5)); // MM-DD (Monday)
+    const r = rateOf(store.weekly[k]?.tasks || []);
+    values.push(r===null ? null : r);
+  });
+  return {labels, values};
+}
+
+function buildTypeSeries(days=30){
+  const keys = listDaysSorted().slice(-days);
+  const agg = {};
+  TYPES.forEach(t=>agg[t]=0);
+  agg["その他"] ||= 0;
+
+  keys.forEach(k=>{
+    (store.daily[k] || []).forEach(t=>{
+      const key = TYPES.includes(t.type) ? t.type : "その他";
+      agg[key] += 1;
+    });
+  });
+
+  const labels = Object.keys(agg).filter(k=>agg[k]>0);
+  const values = labels.map(k=>agg[k]);
+  return {labels, values};
+}
+
+function ensureCharts(){
+  // daily line
+  const dctx = document.getElementById("dailyChart");
+  if(dctx && !dailyChart){
+    dailyChart = new Chart(dctx, {
+      type: "line",
+      data: { labels: [], datasets: [{ label:"日次達成率(%)", data: [] }] },
+      options: {
+        responsive: true,
+        scales: { y: { min:0, max:100 } },
+        spanGaps: true
+      }
+    });
+  }
+  // weekly bar
+  const wctx = document.getElementById("weeklyChart");
+  if(wctx && !weeklyChart){
+    weeklyChart = new Chart(wctx, {
+      type: "bar",
+      data: { labels: [], datasets: [{ label:"週次達成率(%)", data: [] }] },
+      options: { responsive:true, scales:{ y:{ min:0, max:100 } } }
+    });
+  }
+  // type donut
+  const tctx = document.getElementById("typeChart");
+  if(tctx && !typeChart){
+    typeChart = new Chart(tctx, {
+      type: "doughnut",
+      data: { labels: [], datasets: [{ label:"タイプ別", data: [] }] },
+      options: { responsive:true }
+    });
+  }
+}
+
+function updateCharts(){
+  ensureCharts();
+  if(dailyChart){
+    const s = buildDailySeries(30);
+    dailyChart.data.labels = s.labels;
+    dailyChart.data.datasets[0].data = s.values;
+    dailyChart.update();
+  }
+  if(weeklyChart){
+    const s = buildWeeklySeries(12);
+    weeklyChart.data.labels = s.labels;
+    weeklyChart.data.datasets[0].data = s.values;
+    weeklyChart.update();
+  }
+  if(typeChart){
+    const s = buildTypeSeries(30);
+    typeChart.data.labels = s.labels;
+    typeChart.data.datasets[0].data = s.values;
+    typeChart.update();
+  }
+}
+
+// ===== Calendar render =====
+const WEEKDAYS = ["月","火","水","木","金","土","日"];
+
+function renderCalendar(){
+  const grid = document.getElementById("calendarGrid");
+  if(!grid) return;
+
+  const y = calMonth.getFullYear();
+  const m = calMonth.getMonth(); // 0-based
+
+  document.getElementById("calMonthLabel").textContent = `${y}年 ${m+1}月`;
+
+  grid.innerHTML = "";
+  // headers
+  WEEKDAYS.forEach(w=>{
+    const h = document.createElement("div");
+    h.className = "calHead";
+    h.textContent = w;
+    grid.appendChild(h);
+  });
+
+  // first day of month
+  const first = new Date(y, m, 1);
+  const firstIso = iso(first);
+
+  // weekday index with Monday=0..Sunday=6
+  const jsDay = first.getDay(); // 0 Sun..6 Sat
+  const idx = (jsDay + 6) % 7;  // convert to Mon=0
+
+  // start date shown on calendar (Monday of the first week)
+  const startIso = addDays(firstIso, -idx);
+
+  // 6 weeks grid (42 days)
+  for(let i=0; i<42; i++){
+    const dayIso = addDays(startIso, i);
+    const d = new Date(dayIso + "T12:00:00");
+    const inMonth = d.getMonth() === m;
+
+    const list = store.daily[dayIso] || [];
+    const r = rateOf(list);
+    const cell = document.createElement("div");
+    cell.className = `calCell ${heatClass(r)} ${inMonth ? "" : "outMonth"} ${dayIso===todayKey ? "todayRing" : ""}`;
+
+    const top = document.createElement("div");
+    top.className = "calTop";
+    const dayNum = document.createElement("span");
+    dayNum.className = "calDay";
+    dayNum.textContent = String(d.getDate());
+    const badge = document.createElement("span");
+    badge.className = "calRate";
+    badge.textContent = r===null ? "" : `${r}%`;
+    top.appendChild(dayNum);
+    top.appendChild(badge);
+
+    const bottom = document.createElement("div");
+    bottom.className = "calRate";
+    bottom.textContent = list.length ? `${list.filter(t=>t.done).length}/${list.length}` : "";
+
+    cell.appendChild(top);
+    cell.appendChild(bottom);
+    cell.onclick = ()=>goDayFromCalendar(dayIso);
+
+    grid.appendChild(cell);
+  }
+}
+
+// ===== Render =====
 function render(){
   // Daily
-  const daily = store.daily[todayKey] || [];
-  document.getElementById("dailyDate").textContent = todayKey;
-  document.getElementById("dailyTitle").textContent = "今日";
+  document.getElementById("dailyDate").textContent = selectedDayKey;
+  const daily = store.daily[selectedDayKey] || [];
   const dr = rateOf(daily);
-  document.getElementById("dailyRate").textContent = dr === null ? "" : `達成率 ${dr}%`;
+  document.getElementById("dailyRate").textContent = dr===null ? "" : `達成率 ${dr}%`;
+
+  // streak
+  const streak = calcStreak();
+  document.getElementById("streakBadge").textContent = streak>0 ? `🔥 ${streak}日連続` : "🔥 0日";
 
   const dailyList = document.getElementById("dailyList");
   dailyList.innerHTML = "";
-  daily.forEach((t, i)=>{
+  daily.forEach((t,i)=>{
     const li = document.createElement("li");
     const left = document.createElement("span");
-    left.textContent = t.text;
+    left.textContent = `【${t.type || "その他"}】 ${t.text}`;
     if(t.done) left.className = "done";
     const right = document.createElement("span");
     right.textContent = t.done ? "〇" : "";
@@ -214,19 +492,22 @@ function render(){
     dailyList.appendChild(li);
   });
 
+  // daily type chips
+  renderChips(document.getElementById("dailyTypeSummary"), typeCounts(daily));
+
   // Weekly
   store.weekly[selectedWeekKey] ||= { tasks: [] };
   const weekly = store.weekly[selectedWeekKey].tasks || [];
   document.getElementById("weekLabel").textContent = `週: ${weekRangeLabel(selectedWeekKey)}`;
   const wr = rateOf(weekly);
-  document.getElementById("weeklyRate").textContent = wr === null ? "" : `達成率 ${wr}%`;
+  document.getElementById("weeklyRate").textContent = wr===null ? "" : `達成率 ${wr}%`;
 
   const weeklyList = document.getElementById("weeklyList");
   weeklyList.innerHTML = "";
   weekly.forEach((t,i)=>{
     const li = document.createElement("li");
     const left = document.createElement("span");
-    left.textContent = t.text;
+    left.textContent = `【${t.type || "その他"}】 ${t.text}`;
     if(t.done) left.className = "done";
     const right = document.createElement("span");
     right.textContent = t.done ? "〇" : "";
@@ -236,10 +517,15 @@ function render(){
     weeklyList.appendChild(li);
   });
 
+  renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
+
+  // Calendar
+  renderCalendar();
+
   // History - weeks
   const hw = document.getElementById("historyWeeks");
   hw.innerHTML = "";
-  const wkeys = listWeeksSorted().slice().reverse(); // newest first
+  const wkeys = listWeeksSorted().slice().reverse();
   if(wkeys.length === 0){
     const li = document.createElement("li");
     li.textContent = "まだ週次データがありません。";
@@ -252,7 +538,7 @@ function render(){
       const left = document.createElement("span");
       left.textContent = weekRangeLabel(k);
       const right = document.createElement("span");
-      right.textContent = r === null ? "" : `${r}%`;
+      right.textContent = r===null ? "" : `${r}%`;
       li.appendChild(left);
       li.appendChild(right);
       li.onclick = ()=>goWeekFromHistory(k);
@@ -260,7 +546,7 @@ function render(){
     });
   }
 
-  // History - days (last 14 by date)
+  // History - days
   const hd = document.getElementById("historyDays");
   hd.innerHTML = "";
   const dkeys = listDaysSorted().slice(-14).reverse();
@@ -276,40 +562,59 @@ function render(){
       const left = document.createElement("span");
       left.textContent = k;
       const right = document.createElement("span");
-      right.textContent = r === null ? "" : `${r}%`;
+      right.textContent = r===null ? "" : `${r}%`;
       li.appendChild(left);
       li.appendChild(right);
-      li.onclick = ()=>{
-        alert(`この日(${k})は閲覧のみ（必要なら後で「過去日編集」も追加できる）`);
-      };
+      li.onclick = ()=>{ selectedDayKey = k; show("daily"); };
       hd.appendChild(li);
     });
   }
 
-  // Notification status
+  // Charts
+  updateCharts();
+
+  // Notification status + shortcut URL
   if("Notification" in window){
     setNotifStatus("通知状態: " + Notification.permission);
   } else {
     setNotifStatus("通知状態: 未対応");
   }
+  const url = `${location.origin}${location.pathname}?open=daily`;
+  const sEl = document.getElementById("shortcutUrl");
+  if(sEl) sEl.textContent = url;
 }
 
-// ====== PWA ======
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch(()=>{});
-}
-
-// Run
-render();
-nightlyNudge();
-
-// ====== Shortcut-friendly deep link ======
-// iOSショートカットで「URLを開く」を使うとき：
-// https://<あなたのURL>/?open=daily みたいにすると、起動時にそのタブを開く
+// ===== Deep link =====
 (function handleDeepLink(){
   const p = new URLSearchParams(location.search);
   const open = p.get("open");
   if(open === "weekly") show("weekly");
   if(open === "history") show("history");
+  if(open === "calendar") show("calendar");
+  if(open === "analytics") show("analytics");
   if(open === "daily") show("daily");
 })();
+
+// ===== PWA =====
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(()=>{});
+}
+
+// ===== Expose to HTML =====
+window.show = show;
+window.addTask = addTask;
+window.toggle = toggle;
+window.shiftWeek = shiftWeek;
+window.goThisWeek = goThisWeek;
+window.shiftDay = shiftDay;
+window.goToday = goToday;
+window.shiftMonth = shiftMonth;
+window.goThisMonth = goThisMonth;
+window.goWeekFromHistory = goWeekFromHistory;
+window.clearDone = clearDone;
+window.requestNotif = requestNotif;
+window.testNotif = testNotif;
+
+// ===== Run =====
+render();
+nightlyNudge();
