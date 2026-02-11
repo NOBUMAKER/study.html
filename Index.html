@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Study Log</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="tabs">
+    <button id="tabDaily" class="tab active" onclick="show('daily')">今日</button>
+    <button id="tabWeekly" class="tab" onclick="show('weekly')">今週</button>
+    <button id="tabCalendar" class="tab" onclick="show('calendar')">カレンダー</button>
+    <button id="tabAnalytics" class="tab" onclick="show('analytics')">グラフ</button>
+    <button id="tabHistory" class="tab" onclick="show('history')">履歴</button>
+  </div>
+</header>
+
+<main class="container">
+  <!-- 日次 -->
+  <section id="daily">
+    <div class="row">
+      <h2 id="dailyTitle">今日</h2>
+      <div class="meta">
+        <span id="dailyDate"></span>
+        <span id="streakBadge" class="badge"></span>
+        <span id="dailyRate" class="badge"></span>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn tiny secondary" onclick="shiftDay(-1)">◀ 前日</button>
+      <button class="btn tiny secondary" onclick="goToday()">今日</button>
+      <button class="btn tiny secondary" onclick="shiftDay(1)">次日 ▶</button>
+    </div>
+
+    <ul id="dailyList" class="list"></ul>
+
+    <div class="row">
+      <button class="btn" onclick="addTask('daily')">＋ タスク追加</button>
+      <button class="btn secondary" onclick="clearDone('daily')">完了を整理</button>
+    </div>
+
+    <div class="card">
+      <h3>タイプ別（今日）</h3>
+      <div id="dailyTypeSummary" class="chips"></div>
+    </div>
+
+    <div class="card">
+      <h3>リマインド</h3>
+      <p class="muted">20:00以降に開くと1日1回だけ優しく促します。ショートカット自動起動が最強です。</p>
+      <div class="row">
+        <button class="btn secondary" onclick="requestNotif()">通知を許可</button>
+        <button class="btn secondary" onclick="testNotif()">通知テスト</button>
+      </div>
+      <p id="notifStatus" class="muted"></p>
+      <details class="muted">
+        <summary>ショートカット（毎晩自動で開く）</summary>
+        <ol>
+          <li>iPhone「ショートカット」→「オートメーション」→「個人用」</li>
+          <li>時間：21:00 / 毎日</li>
+          <li>アクション：「URLを開く」→ <span class="mono" id="shortcutUrl"></span></li>
+        </ol>
+      </details>
+    </div>
+  </section>
+
+  <!-- 週次 -->
+  <section id="weekly" hidden>
+    <div class="row">
+      <h2>週次</h2>
+      <div class="meta">
+        <span id="weekLabel"></span>
+        <span id="weeklyRate" class="badge"></span>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn tiny" onclick="shiftWeek(-1)">◀ 前週</button>
+      <button class="btn tiny secondary" onclick="goThisWeek()">今週</button>
+      <button class="btn tiny" onclick="shiftWeek(1)">次週 ▶</button>
+    </div>
+
+    <ul id="weeklyList" class="list"></ul>
+
+    <div class="row">
+      <button class="btn" onclick="addTask('weekly')">＋ 週次タスク追加</button>
+      <button class="btn secondary" onclick="clearDone('weekly')">完了を整理</button>
+    </div>
+
+    <div class="card">
+      <h3>タイプ別（週次）</h3>
+      <div id="weeklyTypeSummary" class="chips"></div>
+    </div>
+  </section>
+
+  <!-- カレンダー -->
+  <section id="calendar" hidden>
+    <div class="row">
+      <h2>カレンダー</h2>
+      <div class="meta">
+        <span id="calMonthLabel"></span>
+        <span class="badge">タップで日次へ</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn tiny" onclick="shiftMonth(-1)">◀ 前月</button>
+      <button class="btn tiny secondary" onclick="goThisMonth()">今月</button>
+      <button class="btn tiny" onclick="shiftMonth(1)">次月 ▶</button>
+    </div>
+
+    <div id="calendarGrid" class="calendar"></div>
+
+    <p class="muted">
+      色：0%=灰 / 1-49%=薄 / 50-79%=中 / 80%+=濃（達成率ベース）
+    </p>
+  </section>
+
+  <!-- グラフ -->
+  <section id="analytics" hidden>
+    <div class="row">
+      <h2>グラフ</h2>
+      <div class="meta">
+        <span class="badge">直近30日</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>日次達成率（折れ線）</h3>
+      <canvas id="dailyChart" height="140"></canvas>
+    </div>
+
+    <div class="card">
+      <h3>週次達成率（棒）</h3>
+      <canvas id="weeklyChart" height="140"></canvas>
+    </div>
+
+    <div class="card">
+      <h3>タイプ別（直近30日）</h3>
+      <canvas id="typeChart" height="160"></canvas>
+      <p class="muted">タスクのバランスを見る用（例：講義/演習/復習/模試）。</p>
+    </div>
+  </section>
+
+  <!-- 履歴 -->
+  <section id="history" hidden>
+    <div class="row">
+      <h2>履歴</h2>
+      <div class="meta">
+        <span class="muted">週次＆日次を見返せます</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>週の履歴</h3>
+      <ul id="historyWeeks" class="list"></ul>
+    </div>
+
+    <div class="card">
+      <h3>日次の履歴（直近14日）</h3>
+      <ul id="historyDays" class="list"></ul>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
