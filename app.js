@@ -177,6 +177,20 @@ function clearDone(type){
   }
   save();
 }
+function deleteTask(type, idx){
+  if(!confirm("このタスクを削除しますか？")) return;
+
+  if(type === "daily"){
+    const list = store.daily[selectedDayKey] || [];
+    list.splice(idx, 1);
+    store.daily[selectedDayKey] = list;
+  } else {
+    const list = store.weekly[selectedWeekKey]?.tasks || [];
+    list.splice(idx, 1);
+    store.weekly[selectedWeekKey].tasks = list;
+  }
+  save();
+}
 
 // ===== History helpers =====
 function listWeeksSorted(){
@@ -588,9 +602,25 @@ if(tm) tm.textContent = `学習時間 ${mins}分`;
     if(t.done) left.className = "done";
     const right = document.createElement("span");
     right.textContent = t.done ? "〇" : "";
-    li.appendChild(left);
-    li.appendChild(right);
-    li.onclick = ()=>toggle("daily", i);
+    let pressTimer = null;
+let longPressed = false;
+
+li.addEventListener("pointerdown", ()=>{
+  longPressed = false;
+  pressTimer = setTimeout(()=>{
+    longPressed = true;
+    deleteTask("daily", i);
+  }, 600);
+});
+
+li.addEventListener("pointerup", ()=>{
+  if(pressTimer) clearTimeout(pressTimer);
+  if(!longPressed) toggle("daily", i);
+});
+
+li.addEventListener("pointerleave", ()=>{
+  if(pressTimer) clearTimeout(pressTimer);
+});
     dailyList.appendChild(li);
   });
 
@@ -613,9 +643,25 @@ if(tm) tm.textContent = `学習時間 ${mins}分`;
     if(t.done) left.className = "done";
     const right = document.createElement("span");
     right.textContent = t.done ? "〇" : "";
-    li.appendChild(left);
-    li.appendChild(right);
-    li.onclick = ()=>toggle("weekly", i);
+    let pressTimerW = null;
+let longPressedW = false;
+
+li.addEventListener("pointerdown", ()=>{
+  longPressedW = false;
+  pressTimerW = setTimeout(()=>{
+    longPressedW = true;
+    deleteTask("weekly", i);
+  }, 600);
+});
+
+li.addEventListener("pointerup", ()=>{
+  if(pressTimerW) clearTimeout(pressTimerW);
+  if(!longPressedW) toggle("weekly", i);
+});
+
+li.addEventListener("pointerleave", ()=>{
+  if(pressTimerW) clearTimeout(pressTimerW);
+});
     weeklyList.appendChild(li);
   });
 
