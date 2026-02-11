@@ -595,75 +595,80 @@ if(tm) tm.textContent = `学習時間 ${mins}分`;
 
   const dailyList = document.getElementById("dailyList");
   dailyList.innerHTML = "";
+
   daily.forEach((t,i)=>{
-    const li = document.createElement("li");
-    const left = document.createElement("span");
-    left.textContent = `【${t.type || "その他"}】 ${t.text}`;
-    if(t.done) left.className = "done";
-    const right = document.createElement("span");
-    right.textContent = t.done ? "〇" : "";
-    let pressTimer = null;
-let longPressed = false;
+  const li = document.createElement("li");
 
-li.addEventListener("pointerdown", ()=>{
-  longPressed = false;
-  pressTimer = setTimeout(()=>{
-    longPressed = true;
-    deleteTask("daily", i);
-  }, 600);
-});
+  const left = document.createElement("span");
+  left.textContent = `【${t.type || "その他"}】 ${t.text}`;
+  if(t.done) left.className = "done";
 
-li.addEventListener("pointerup", ()=>{
-  if(pressTimer) clearTimeout(pressTimer);
-  if(!longPressed) toggle("daily", i);
-});
+  const right = document.createElement("span");
+  right.textContent = t.done ? "〇" : "";
 
-li.addEventListener("pointerleave", ()=>{
-  if(pressTimer) clearTimeout(pressTimer);
-});
-    dailyList.appendChild(li);
+  li.appendChild(left);
+  li.appendChild(right);
+
+  // 短押し＝完了切替 / 長押し＝削除
+  let pressTimer = null;
+  let longPressed = false;
+
+  li.addEventListener("pointerdown", ()=>{
+    longPressed = false;
+    pressTimer = setTimeout(()=>{
+      longPressed = true;
+      deleteTask("daily", i);
+    }, 600);
   });
 
-  // daily type chips
-  renderChips(document.getElementById("dailyTypeSummary"), typeCounts(daily));
+  li.addEventListener("pointerup", ()=>{
+    if(pressTimer) clearTimeout(pressTimer);
+    if(!longPressed) toggle("daily", i);
+  });
 
-  // Weekly
-  store.weekly[selectedWeekKey] ||= { tasks: [] };
-  const weekly = store.weekly[selectedWeekKey].tasks || [];
-  document.getElementById("weekLabel").textContent = `週: ${weekRangeLabel(selectedWeekKey)}`;
-  const wr = rateOf(weekly);
-  document.getElementById("weeklyRate").textContent = wr===null ? "" : `達成率 ${wr}%`;
+  li.addEventListener("pointerleave", ()=>{
+    if(pressTimer) clearTimeout(pressTimer);
+  });
 
-  const weeklyList = document.getElementById("weeklyList");
-  weeklyList.innerHTML = "";
+  dailyList.appendChild(li);
+});
+
   weekly.forEach((t,i)=>{
-    const li = document.createElement("li");
-    const left = document.createElement("span");
-    left.textContent = `【${t.type || "その他"}】 ${t.text}`;
-    if(t.done) left.className = "done";
-    const right = document.createElement("span");
-    right.textContent = t.done ? "〇" : "";
-    let pressTimerW = null;
-let longPressedW = false;
+  const li = document.createElement("li");
 
-li.addEventListener("pointerdown", ()=>{
-  longPressedW = false;
-  pressTimerW = setTimeout(()=>{
-    longPressedW = true;
-    deleteTask("weekly", i);
-  }, 600);
-});
+  const left = document.createElement("span");
+  left.textContent = `【${t.type || "その他"}】 ${t.text}`;
+  if(t.done) left.className = "done";
 
-li.addEventListener("pointerup", ()=>{
-  if(pressTimerW) clearTimeout(pressTimerW);
-  if(!longPressedW) toggle("weekly", i);
-});
+  const right = document.createElement("span");
+  right.textContent = t.done ? "〇" : "";
 
-li.addEventListener("pointerleave", ()=>{
-  if(pressTimerW) clearTimeout(pressTimerW);
-});
-    weeklyList.appendChild(li);
+  li.appendChild(left);
+  li.appendChild(right);
+
+  // 短押し＝完了切替 / 長押し＝削除
+  let pressTimer = null;
+  let longPressed = false;
+
+  li.addEventListener("pointerdown", ()=>{
+    longPressed = false;
+    pressTimer = setTimeout(()=>{
+      longPressed = true;
+      deleteTask("weekly", i);
+    }, 600);
   });
+
+  li.addEventListener("pointerup", ()=>{
+    if(pressTimer) clearTimeout(pressTimer);
+    if(!longPressed) toggle("weekly", i);
+  });
+
+  li.addEventListener("pointerleave", ()=>{
+    if(pressTimer) clearTimeout(pressTimer);
+  });
+
+  weeklyList.appendChild(li);
+});
 
   renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
 
