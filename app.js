@@ -4,7 +4,7 @@ const TYPES = ["講義","演習","復習","模試","その他"];
 
 const store = JSON.parse(localStorage.getItem(KEY)) || {
   daily: {},   // "YYYY-MM-DD": [{text, done, type}]
-  weekly: {}   // "MONDAY_YYYY-MM-DD": { tasks: [{text, done, type}] }
+  weekly: },  // "MONDAY_YYYY-MM-DD": { tasks: [{text, done, type}] }
   dailyTime: {} // ★ 追加： "YYYY-MM-DD": minutes
 };
 
@@ -374,7 +374,6 @@ window.timerPause = timerPause;
 window.timerStop = timerStop;
 window.timerReset = timerReset;
 window.addMinutes = addMinutes;
-})();
 
 // ===== Charts =====
 function buildDailySeries(days=30){
@@ -675,6 +674,7 @@ if(tm) tm.textContent = `学習時間 ${mins}分`;
   if(open === "calendar") show("calendar");
   if(open === "analytics") show("analytics");
   if(open === "daily") show("daily");
+})();
 
 // ===== PWA =====
 if ("serviceWorker" in navigator) {
@@ -695,6 +695,13 @@ window.goWeekFromHistory = goWeekFromHistory;
 window.clearDone = clearDone;
 window.requestNotif = requestNotif;
 window.testNotif = testNotif;
+
+// タイマー用（追加）
+window.timerStart = timerStart;
+window.timerPause = timerPause;
+window.timerStop  = timerStop;
+window.timerReset = timerReset;
+window.addMinutes = addMinutes;
 
 // ===== Run =====
 render();
