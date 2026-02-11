@@ -580,8 +580,9 @@ function renderCalendar(){
 // ===== Render =====
 
 function render(){
-  // Daily
+  // ===== Daily =====
   document.getElementById("dailyDate").textContent = selectedDayKey;
+
   const daily = store.daily[selectedDayKey] || [];
   const dr = rateOf(daily);
   document.getElementById("dailyRate").textContent = dr===null ? "" : `達成率 ${dr}%`;
@@ -593,7 +594,6 @@ function render(){
   const streak = calcStreak();
   document.getElementById("streakBadge").textContent = streak>0 ? `🔥 ${streak}日連続` : "🔥 0日";
 
-  // 日次リスト
   const dailyList = document.getElementById("dailyList");
   dailyList.innerHTML = "";
 
@@ -634,12 +634,14 @@ function render(){
     dailyList.appendChild(li);
   });
 
-  // daily type chips（←ここ！forEachの外）
+  // daily type chips（←ここはforEachの外！）
   renderChips(document.getElementById("dailyTypeSummary"), typeCounts(daily));
 
-  /* ===== Weekly ===== */
+
+  // ===== Weekly =====
   store.weekly[selectedWeekKey] ||= { tasks: [] };
   const weekly = store.weekly[selectedWeekKey].tasks || [];
+
   document.getElementById("weekLabel").textContent = `週: ${weekRangeLabel(selectedWeekKey)}`;
   const wr = rateOf(weekly);
   document.getElementById("weeklyRate").textContent = wr===null ? "" : `達成率 ${wr}%`;
@@ -686,9 +688,12 @@ function render(){
 
   renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
 
-  // Calendar
-  renderCalendar()
-  // History - weeks
+
+  // ===== Calendar =====
+  renderCalendar();
+
+
+  // ===== History (weeks) =====
   const hw = document.getElementById("historyWeeks");
   hw.innerHTML = "";
   const wkeys = listWeeksSorted().slice().reverse();
@@ -712,7 +717,7 @@ function render(){
     });
   }
 
-  // History - days
+  // ===== History (days) =====
   const hd = document.getElementById("historyDays");
   hd.innerHTML = "";
   const dkeys = listDaysSorted().slice(-14).reverse();
@@ -736,10 +741,10 @@ function render(){
     });
   }
 
-  // Charts
-  updateCharts();
+  // ===== Charts =====
+  if(window.Chart) updateCharts();
 
-  // Notification status + shortcut URL
+  // ===== Notification status + shortcut URL =====
   if("Notification" in window){
     setNotifStatus("通知状態: " + Notification.permission);
   } else {
