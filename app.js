@@ -633,7 +633,20 @@ if(tm) tm.textContent = `学習時間 ${mins}分`;
   dailyList.appendChild(li);
 });
 
-  weekly.forEach((t,i)=>{
+  // daily type chips
+renderChips(document.getElementById("dailyTypeSummary"), typeCounts(daily));
+
+// ===== Weekly（これを必ず入れる）=====
+store.weekly[selectedWeekKey] ||= { tasks: [] };
+const weekly = store.weekly[selectedWeekKey].tasks || [];
+document.getElementById("weekLabel").textContent = `週: ${weekRangeLabel(selectedWeekKey)}`;
+const wr = rateOf(weekly);
+document.getElementById("weeklyRate").textContent = wr===null ? "" : `達成率 ${wr}%`;
+
+const weeklyList = document.getElementById("weeklyList");
+weeklyList.innerHTML = "";
+
+weekly.forEach((t,i)=>{
   const li = document.createElement("li");
 
   const left = document.createElement("span");
@@ -670,7 +683,7 @@ if(tm) tm.textContent = `学習時間 ${mins}分`;
   weeklyList.appendChild(li);
 });
 
-  renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
+renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
 
   // Calendar
   renderCalendar();
