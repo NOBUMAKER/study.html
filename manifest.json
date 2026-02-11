@@ -1,0 +1,8 @@
+{
+  "name": "Study Log",
+  "short_name": "Study",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff"
+}
