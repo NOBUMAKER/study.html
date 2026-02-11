@@ -377,6 +377,25 @@ window.timerStop = timerStop;
 window.timerReset = timerReset;
 window.addMinutes = addMinutes;
 
+function subtractMinutes(mins){
+  const key = selectedDayKey || todayKey;
+  store.dailyTime ||= {};
+  const current = store.dailyTime[key] || 0;
+  const next = Math.max(0, current - mins);
+  store.dailyTime[key] = next;
+  save();
+}
+
+function resetTodayTime(){
+  const key = selectedDayKey || todayKey;
+  if(!confirm("今日の学習時間を0分にしますか？")) return;
+  store.dailyTime[key] = 0;
+  save();
+}
+
+window.subtractMinutes = subtractMinutes;
+window.resetTodayTime = resetTodayTime;
+
 // ===== Charts =====
 function buildDailySeries(days=30){
   const keys = listDaysSorted();
