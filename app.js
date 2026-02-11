@@ -599,44 +599,10 @@ if(tm) tm.textContent = `学習時間 ${mins}分`;
   daily.forEach((t,i)=>{
   const li = document.createElement("li");
 
-  const left = document.createElement("span");
-  left.textContent = `【${t.type || "その他"}】 ${t.text}`;
-  if(t.done) left.className = "done";
-
-  const right = document.createElement("span");
-  right.textContent = t.done ? "〇" : "";
-
-  li.appendChild(left);
-  li.appendChild(right);
-
-  // 短押し＝完了切替 / 長押し＝削除
-  let pressTimer = null;
-  let longPressed = false;
-
-  li.addEventListener("pointerdown", ()=>{
-    longPressed = false;
-    pressTimer = setTimeout(()=>{
-      longPressed = true;
-      deleteTask("daily", i);
-    }, 600);
-  });
-
-  li.addEventListener("pointerup", ()=>{
-    if(pressTimer) clearTimeout(pressTimer);
-    if(!longPressed) toggle("daily", i);
-  });
-
-  li.addEventListener("pointerleave", ()=>{
-    if(pressTimer) clearTimeout(pressTimer);
-  });
-
-  dailyList.appendChild(li);
-});
-
   // daily type chips
 renderChips(document.getElementById("dailyTypeSummary"), typeCounts(daily));
 
-// ===== Weekly（これを必ず入れる）=====
+/* ===== Weekly（ここから）===== */
 store.weekly[selectedWeekKey] ||= { tasks: [] };
 const weekly = store.weekly[selectedWeekKey].tasks || [];
 document.getElementById("weekLabel").textContent = `週: ${weekRangeLabel(selectedWeekKey)}`;
@@ -684,6 +650,44 @@ weekly.forEach((t,i)=>{
 });
 
 renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
+/* ===== Weekly（ここまで）===== */
+
+  const left = document.createElement("span");
+  left.textContent = `【${t.type || "その他"}】 ${t.text}`;
+  if(t.done) left.className = "done";
+
+  const right = document.createElement("span");
+  right.textContent = t.done ? "〇" : "";
+
+  li.appendChild(left);
+  li.appendChild(right);
+
+  // 短押し＝完了切替 / 長押し＝削除
+  let pressTimer = null;
+  let longPressed = false;
+
+  li.addEventListener("pointerdown", ()=>{
+    longPressed = false;
+    pressTimer = setTimeout(()=>{
+      longPressed = true;
+      deleteTask("daily", i);
+    }, 600);
+  });
+
+  li.addEventListener("pointerup", ()=>{
+    if(pressTimer) clearTimeout(pressTimer);
+    if(!longPressed) toggle("daily", i);
+  });
+
+  li.addEventListener("pointerleave", ()=>{
+    if(pressTimer) clearTimeout(pressTimer);
+  });
+
+  dailyList.appendChild(li);
+});
+
+
+
 
   // Calendar
   renderCalendar();
