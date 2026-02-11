@@ -3,9 +3,9 @@ const KEY = "study_pwa_v2";
 const TYPES = ["講義","演習","復習","模試","その他"];
 
 const store = JSON.parse(localStorage.getItem(KEY)) || {
-  daily: {},   // "YYYY-MM-DD": [{text, done, type}]
-  weekly: },  // "MONDAY_YYYY-MM-DD": { tasks: [{text, done, type}] }
-  dailyTime: {} // ★ 追加： "YYYY-MM-DD": minutes
+  daily: {},     // "YYYY-MM-DD": [{text, done, type}]
+  weekly: {},    // "MONDAY_YYYY-MM-DD": { tasks: [{text, done, type}] }
+  dailyTime: {}  // ★ 追加： "YYYY-MM-DD": minutes
 };
 
 function save() {
