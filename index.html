@@ -1,89 +1,265 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Study Log Pro</title>
-
-<link rel="stylesheet" href="style.css" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Study Log Pro</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-
-<header class="glass-header">
-  <div class="logo">Study Log</div>
-  <div class="exam-countdown" id="examCountdown"></div>
-</header>
-
-<main class="layout">
-
-  <!-- LEFT PANEL -->
-  <aside class="sidebar glass">
-    <button onclick="show('daily')">Today</button>
-    <button onclick="show('weekly')">Week</button>
-    <button onclick="show('calendar')">Calendar</button>
-    <button onclick="show('analytics')">Analytics</button>
-  </aside>
-
-  <!-- MAIN -->
-  <section class="content">
-
-    <!-- 今日のサマリー -->
-    <div class="summary glass">
-      <div class="summary-item">
-        <div class="label">Streak</div>
-        <div id="streakBadge" class="value"></div>
-      </div>
-
-      <div class="summary-item">
-        <div class="label">達成率</div>
-        <div id="dailyRate" class="value"></div>
-      </div>
-
-      <div class="summary-item">
-        <div class="label">学習時間</div>
-        <div id="todayMinutes" class="value"></div>
-      </div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">Study Log</div>
+      <div class="sub">USCPA Planner</div>
     </div>
 
-    <!-- 今日のタスク -->
-    <div id="daily" class="panel glass">
-      <div class="panel-header">
-        <h2 id="dailyDate"></h2>
-        <button onclick="addTask('daily')" class="primary">＋</button>
+    <div class="headerRight">
+      <div class="pill" id="examCountdown">—</div>
+      <button class="iconBtn" id="btnSettings" title="Settings">⚙︎</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <aside class="sidebar">
+      <button class="nav active" id="tabDaily" onclick="show('daily')">Today</button>
+      <button class="nav" id="tabWeekly" onclick="show('weekly')">Week</button>
+      <button class="nav" id="tabMaster" onclick="show('master')">Master</button>
+      <button class="nav" id="tabCalendar" onclick="show('calendar')">Calendar</button>
+      <button class="nav" id="tabHistory" onclick="show('history')">History</button>
+    </aside>
+
+    <section class="content">
+
+      <!-- ===== DAILY ===== -->
+      <section id="daily" class="view">
+        <div class="row between">
+          <div>
+            <div class="h1" id="dailyDate">—</div>
+            <div class="muted" id="dailyMeta">—</div>
+          </div>
+          <div class="row gap8">
+            <button class="btn ghost" onclick="shiftDay(-1)">◀</button>
+            <button class="btn ghost" onclick="goToday()">Today</button>
+            <button class="btn ghost" onclick="shiftDay(1)">▶</button>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="card">
+            <div class="cardTop between">
+              <div>
+                <div class="h2">今日の割当（自動）</div>
+                <div class="muted">週の学習可能時間から自動生成</div>
+              </div>
+              <button class="btn" onclick="rebuildAuto()">再計算</button>
+            </div>
+            <ul id="dailyAutoList" class="list"></ul>
+            <div class="foot muted">タップで完了 / 右の ✎ で編集 / 🗑 で削除（自動でもOK）</div>
+          </div>
+
+          <div class="card">
+            <div class="cardTop between">
+              <div>
+                <div class="h2">今日の追加（手動）</div>
+                <div class="muted">思いついた作業・急ぎタスク</div>
+              </div>
+              <button class="btn primary" onclick="addManualTask()">＋追加</button>
+            </div>
+            <ul id="dailyManualList" class="list"></ul>
+
+            <div class="divider"></div>
+
+            <div class="row between">
+              <div>
+                <div class="h2">学習時間（手動）</div>
+                <div class="muted">タイマーなし。分数を入力して加算。</div>
+              </div>
+              <button class="btn ghost danger" onclick="resetDayMinutes()">0にする</button>
+            </div>
+            <div class="row gap8">
+              <input class="input" id="minsInput" inputmode="numeric" placeholder="例: 90" />
+              <button class="btn" onclick="addMinutes()">加算</button>
+              <div class="pill" id="todayMinutes">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardTop between">
+            <div>
+              <div class="h2">復習のタイミング（自動）</div>
+              <div class="muted">完了した学習タスクから 1/3/7/14日後に自動生成</div>
+            </div>
+            <div class="pill" id="reviewHint">—</div>
+          </div>
+          <ul id="todayReviewList" class="list compact"></ul>
+        </div>
+      </section>
+
+      <!-- ===== WEEKLY ===== -->
+      <section id="weekly" class="view" hidden>
+        <div class="row between">
+          <div>
+            <div class="h1" id="weekLabel">—</div>
+            <div class="muted" id="weekMeta">—</div>
+          </div>
+          <div class="row gap8">
+            <button class="btn ghost" onclick="shiftWeek(-1)">◀</button>
+            <button class="btn ghost" onclick="goThisWeek()">This week</button>
+            <button class="btn ghost" onclick="shiftWeek(1)">▶</button>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="card">
+            <div class="cardTop between">
+              <div>
+                <div class="h2">今週の割当（自動）</div>
+                <div class="muted">日ごとの割当をまとめて見える化</div>
+              </div>
+              <button class="btn" onclick="rebuildAuto()">再計算</button>
+            </div>
+            <div id="weeklyAutoBoard" class="board"></div>
+          </div>
+
+          <div class="card">
+            <div class="cardTop between">
+              <div>
+                <div class="h2">今週の容量</div>
+                <div class="muted">週の勉強可能時間（分）を設定</div>
+              </div>
+              <button class="btn" onclick="openSettings()">設定</button>
+            </div>
+            <div class="kpi">
+              <div class="kpiItem">
+                <div class="label">週の容量</div>
+                <div class="value" id="weeklyCap">—</div>
+              </div>
+              <div class="kpiItem">
+                <div class="label">今週の割当</div>
+                <div class="value" id="weeklyAssigned">—</div>
+              </div>
+              <div class="kpiItem">
+                <div class="label">余り</div>
+                <div class="value" id="weeklyRemain">—</div>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="h2">操作</div>
+            <div class="muted">割当後もタスクは自由に編集できます。</div>
+            <div class="row gap8">
+              <button class="btn primary" onclick="seedDemo()">USCPAテンプレ投入</button>
+              <button class="btn ghost danger" onclick="wipeAll()">全データ削除</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== MASTER ===== -->
+      <section id="master" class="view" hidden>
+        <div class="row between">
+          <div>
+            <div class="h1">Master Tasks</div>
+            <div class="muted">試験までの全タスク（推定時間つき）→ 自動割当の母体</div>
+          </div>
+          <div class="row gap8">
+            <button class="btn primary" onclick="addMasterTask()">＋追加</button>
+            <button class="btn" onclick="rebuildAuto()">自動割当を更新</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row gap8">
+            <input class="input" id="masterSearch" placeholder="検索（例: FAR / AUD / Becker）" oninput="render()" />
+            <select class="select" id="masterFilter" onchange="render()">
+              <option value="all">すべて</option>
+              <option value="open">未完了</option>
+              <option value="done">完了</option>
+            </select>
+          </div>
+          <ul id="masterList" class="list"></ul>
+        </div>
+      </section>
+
+      <!-- ===== CALENDAR ===== -->
+      <section id="calendar" class="view" hidden>
+        <div class="row between">
+          <div>
+            <div class="h1" id="calMonthLabel">—</div>
+            <div class="muted">色は「その日の達成率（自動+手動の完了割合）」</div>
+          </div>
+          <div class="row gap8">
+            <button class="btn ghost" onclick="shiftMonth(-1)">◀</button>
+            <button class="btn ghost" onclick="goThisMonth()">This month</button>
+            <button class="btn ghost" onclick="shiftMonth(1)">▶</button>
+          </div>
+        </div>
+        <div id="calendarGrid" class="calendar"></div>
+      </section>
+
+      <!-- ===== HISTORY ===== -->
+      <section id="history" class="view" hidden>
+        <div class="row between">
+          <div>
+            <div class="h1">History</div>
+            <div class="muted">過去の週・日を確認</div>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="card">
+            <div class="h2">週</div>
+            <ul id="historyWeeks" class="list compact"></ul>
+          </div>
+          <div class="card">
+            <div class="h2">日（直近14日）</div>
+            <ul id="historyDays" class="list compact"></ul>
+          </div>
+        </div>
+      </section>
+
+    </section>
+  </main>
+
+  <!-- ===== SETTINGS MODAL ===== -->
+  <div class="modal" id="settingsModal" hidden>
+    <div class="modalCard">
+      <div class="row between">
+        <div>
+          <div class="h2">Settings</div>
+          <div class="muted">試験日・週の容量・復習間隔</div>
+        </div>
+        <button class="iconBtn" onclick="closeSettings()">✕</button>
       </div>
 
-      <ul id="dailyList" class="task-list"></ul>
+      <div class="form">
+        <label class="field">
+          <span>試験日</span>
+          <input class="input" id="examDateInput" type="date" />
+        </label>
 
-      <div class="type-summary" id="dailyTypeSummary"></div>
-    </div>
+        <label class="field">
+          <span>週の学習可能時間（分）</span>
+          <input class="input" id="weeklyCapInput" inputmode="numeric" placeholder="例: 900（=15時間）" />
+        </label>
 
-    <!-- 週 -->
-    <div id="weekly" class="panel glass" hidden>
-      <div class="panel-header">
-        <h2 id="weekLabel"></h2>
-        <button onclick="addTask('weekly')" class="primary">＋</button>
+        <label class="field">
+          <span>復習オフセット（日）</span>
+          <input class="input" id="reviewOffsetsInput" placeholder="例: 1,3,7,14" />
+        </label>
+
+        <div class="row gap8">
+          <button class="btn primary" onclick="saveSettings()">保存</button>
+          <button class="btn ghost" onclick="closeSettings()">閉じる</button>
+        </div>
       </div>
-      <ul id="weeklyList" class="task-list"></ul>
     </div>
+  </div>
 
-    <!-- カレンダー -->
-    <div id="calendar" class="panel glass" hidden>
-      <h2 id="calMonthLabel"></h2>
-      <div id="calendarGrid" class="calendar"></div>
-    </div>
-
-    <!-- グラフ -->
-    <div id="analytics" class="panel glass" hidden>
-      <canvas id="dailyChart"></canvas>
-      <canvas id="weeklyChart"></canvas>
-      <canvas id="typeChart"></canvas>
-    </div>
-
-  </section>
-</main>
-
-<script src="app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
