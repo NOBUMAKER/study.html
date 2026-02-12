@@ -1439,6 +1439,107 @@ document.addEventListener("DOMContentLoaded", ()=>{
   wireSettingsModal();
 });
 
+// ===== Settings modal (match your HTML ids) =====
+function openSettings(){
+  const m = document.getElementById("settingsModal");
+  if(!m) return;
+  m.hidden = false;
+
+  // 既存値をフォームへ反映
+  store.settings ||= {};
+  const exam = store.settings.examDate || "";
+  const weekly = store.settings.weeklyMinutes ?? store.settings.weeklyCapMinutes ?? 0;
+  const offsets = store.settings.reviewOffsets || [1,3,7,14];
+
+  const examEl = document.getElementById("examDateInput");
+  const weekEl = document.getElementById("weeklyCapInput");
+  const offEl  = document.getElementById("reviewOffsetsInput");
+
+  if(examEl) examEl.value = exam;               // type="date" は YYYY-MM-DD
+  if(weekEl) weekEl.value = weekly ? String(weekly) : "";
+  if(offEl)  offEl.value  = offsets.join(",");
+
+  // フォーカス
+  if(examEl) setTimeout(()=>examEl.focus(), 0);
+}
+
+function closeSettings(){
+  const m = document.getElementById("settingsModal");
+  if(!m) return;
+  m.hidden = true;
+}
+
+function parseOffsets(v){
+  if(!v) return [1,3,7,14];
+  return String(v)
+    .split(/[,\s]+/)
+    .map(x => parseInt(x,10))
+    .filter(n => Number.isFinite(n) && n > 0)
+    .slice(0, 20);
+}
+
+function saveSettings(){
+  store.settings ||= {};
+
+  const examEl = document.getElementById("examDateInput");
+  const weekEl = document.getElementById("weeklyCapInput");
+  const offEl  = document.getElementById("reviewOffsetsInput");
+
+  const exam = examEl?.value || ""; // YYYY-MM-DD
+  const weeklyMin = Math.max(0, parseInt(weekEl?.value || "0", 10) || 0);
+  const offsets = parseOffsets(offEl?.value || "");
+
+  if(exam) store.settings.examDate = exam;
+  store.settings.weeklyMinutes = weeklyMin;
+  store.settings.reviewOffsets = offsets;
+
+  save();          // localStorage保存 + render()
+  if(typeof rebuildAuto === "function") rebuildAuto(); // 自動割当があるなら更新
+  closeSettings();
+}
+
+// ヘッダーの⚙︎ボタンにも紐付け（onclick無しでも動く）
+document.addEventListener("DOMContentLoaded", ()=>{
+  const btn = document.getElementById("btnSettings");
+  if(btn) btn.addEventListener("click", openSettings);
+});
+
+
+// ===== Manual minutes (match your HTML: onclick="addMinutes()") =====
+// 以前の addMinutes(mins) 仕様でも壊れないように両対応
+function addMinutes(mins){
+  let add = mins;
+
+  // 引数なしなら input から読む
+  if(add === undefined){
+    const el = document.getElementById("minsInput");
+    add = parseInt(el?.value || "0", 10) || 0;
+    if(el) el.value = ""; // 入力欄クリア
+  }
+
+  add = Math.max(0, parseInt(add,10) || 0);
+  if(add <= 0) return;
+
+  const key = (typeof selectedDayKey === "string" ? selectedDayKey : iso(new Date()));
+  store.dailyTime ||= {};
+  store.dailyTime[key] = (store.dailyTime[key] || 0) + add;
+  save();
+}
+
+function resetDayMinutes(){
+  const key = (typeof selectedDayKey === "string" ? selectedDayKey : iso(new Date()));
+  store.dailyTime ||= {};
+  store.dailyTime[key] = 0;
+  save();
+}
+
+// HTMLから呼べるように（安全）
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.saveSettings = saveSettings;
+window.addMinutes = addMinutes;
+window.resetDayMinutes = resetDayMinutes;
+
 // ===== Run =====
 render();
 nightlyNudge();
