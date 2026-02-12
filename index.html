@@ -14,6 +14,7 @@
   <div class="tabs">
     <button id="tabDaily" class="tab active" onclick="show('daily')">今日</button>
     <button id="tabWeekly" class="tab" onclick="show('weekly')">今週</button>
+    <button id="tabPlan" class="tab" onclick="show('plan')">計画</button>
     <button id="tabCalendar" class="tab" onclick="show('calendar')">カレンダー</button>
     <button id="tabAnalytics" class="tab" onclick="show('analytics')">グラフ</button>
     <button id="tabHistory" class="tab" onclick="show('history')">履歴</button>
@@ -41,33 +42,33 @@
     <ul id="dailyList" class="list"></ul>
 
     <div class="card">
-  <h3>学習時間（今日）</h3>
-  <div class="row">
-    <span id="todayMinutes" class="badge"></span>
-    <span id="timerDisplay" class="badge">00:00:00</span>
-  </div>
-
-  <div class="row">
-    <button class="btn tiny" onclick="timerStart()">Start</button>
-    <button class="btn tiny secondary" onclick="timerPause()">Pause</button>
-    <button class="btn tiny secondary" onclick="timerStop()">Stop & 記録</button>
-    <button class="btn tiny secondary" onclick="timerReset()">Reset</button>
-  </div>
-
-  <div class="row">
-    <button class="btn tiny secondary" onclick="addMinutes(15)">+15分</button>
-    <button class="btn tiny secondary" onclick="addMinutes(30)">+30分</button>
-    <button class="btn tiny secondary" onclick="addMinutes(60)">+60分</button>
-  </div>
+      <h3>学習時間（今日）</h3>
+      <div class="row">
+        <span id="todayMinutes" class="badge"></span>
+        <span id="timerDisplay" class="badge">00:00:00</span>
+      </div>
 
       <div class="row">
-  <button class="btn tiny danger" onclick="resetTodayTime()">今日を0分にする</button>
-  <button class="btn tiny secondary" onclick="subtractMinutes(15)">-15分</button>
-  <button class="btn tiny secondary" onclick="subtractMinutes(30)">-30分</button>
-</div>
+        <button class="btn tiny" onclick="timerStart()">Start</button>
+        <button class="btn tiny secondary" onclick="timerPause()">Pause</button>
+        <button class="btn tiny secondary" onclick="timerStop()">Stop & 記録</button>
+        <button class="btn tiny secondary" onclick="timerReset()">Reset</button>
+      </div>
 
-  <p class="muted">※Stopで「今日の合計分」に加算されます（タスク別では記録しません）</p>
-</div>
+      <div class="row">
+        <button class="btn tiny secondary" onclick="addMinutes(15)">+15分</button>
+        <button class="btn tiny secondary" onclick="addMinutes(30)">+30分</button>
+        <button class="btn tiny secondary" onclick="addMinutes(60)">+60分</button>
+      </div>
+
+      <div class="row">
+        <button class="btn tiny danger" onclick="resetTodayTime()">今日を0分にする</button>
+        <button class="btn tiny secondary" onclick="subtractMinutes(15)">-15分</button>
+        <button class="btn tiny secondary" onclick="subtractMinutes(30)">-30分</button>
+      </div>
+
+      <p class="muted">※Stopで「今日の合計分」に加算されます（タスク別では記録しません）</p>
+    </div>
 
     <div class="row">
       <button class="btn" onclick="addTask('daily')">＋ タスク追加</button>
@@ -127,6 +128,30 @@
     </div>
   </section>
 
+  <!-- 計画（試験までのマスター） -->
+  <section id="plan" hidden>
+    <div class="row">
+      <h2>計画</h2>
+      <div class="meta">
+        <span id="examDateLabel" class="badge"></span>
+        <span id="examDaysLeft" class="badge"></span>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn" onclick="setExamDate()">試験日を設定</button>
+      <button class="btn secondary" onclick="addMasterTask()">＋ マスタータスク追加</button>
+    </div>
+
+    <div class="card">
+      <h3>試験までの全タスク（締切順）</h3>
+      <ul id="masterList" class="list"></ul>
+      <p class="muted">※タップ＝完了/未完了切替、右クリック(PC)＝削除（スマホは長押し）</p>
+    </div>
+
+    <p class="muted">※「週」タスクは週次に、「日」タスクは日次に自動で出ます（未完了のみ）。</p>
+  </section>
+
   <!-- カレンダー -->
   <section id="calendar" hidden>
     <div class="row">
@@ -151,30 +176,31 @@
   </section>
 
   <!-- グラフ -->
-<section id="analytics" hidden>
-  <div class="row">
-    <h2>グラフ</h2>
-    <div class="meta">
-      <span class="badge">直近30日</span>
+  <section id="analytics" hidden>
+    <div class="row">
+      <h2>グラフ</h2>
+      <div class="meta">
+        <span class="badge">直近30日</span>
+      </div>
     </div>
-  </div>
 
-  <div class="card">
-    <h3>日次達成率（折れ線）</h3>
-    <canvas id="dailyChart" height="140"></canvas>
-  </div>
+    <div class="card">
+      <h3>日次達成率（折れ線）</h3>
+      <canvas id="dailyChart" height="140"></canvas>
+    </div>
 
-  <div class="card">
-    <h3>週次達成率（棒）</h3>
-    <canvas id="weeklyChart" height="140"></canvas>
-  </div>
+    <div class="card">
+      <h3>週次達成率（棒）</h3>
+      <canvas id="weeklyChart" height="140"></canvas>
+    </div>
 
-  <div class="card">
-    <h3>タイプ別（直近30日）</h3>
-    <canvas id="typeChart" height="160"></canvas>
-    <p class="muted">タスクのバランスを見る用（例：講義/演習/復習/模試）。</p>
-  </div>
-</section>
+    <div class="card">
+      <h3>タイプ別（直近30日）</h3>
+      <canvas id="typeChart" height="160"></canvas>
+      <p class="muted">タスクのバランスを見る用（例：講義/演習/復習/模試）。</p>
+    </div>
+  </section>
+
   <!-- 履歴 -->
   <section id="history" hidden>
     <div class="row">
