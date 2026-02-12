@@ -41,33 +41,25 @@
 
     <ul id="dailyList" class="list"></ul>
 
+    <!-- 学習時間：手動入力のみ -->
     <div class="card">
-      <h3>学習時間（今日）</h3>
+      <h3>学習時間（手動）</h3>
       <div class="row">
         <span id="todayMinutes" class="badge"></span>
-        <span id="timerDisplay" class="badge">00:00:00</span>
+        <span id="todayHours" class="badge"></span>
       </div>
-
-      <div class="row">
-        <button class="btn tiny" onclick="timerStart()">Start</button>
-        <button class="btn tiny secondary" onclick="timerPause()">Pause</button>
-        <button class="btn tiny secondary" onclick="timerStop()">Stop & 記録</button>
-        <button class="btn tiny secondary" onclick="timerReset()">Reset</button>
-      </div>
-
       <div class="row">
         <button class="btn tiny secondary" onclick="addMinutes(15)">+15分</button>
         <button class="btn tiny secondary" onclick="addMinutes(30)">+30分</button>
         <button class="btn tiny secondary" onclick="addMinutes(60)">+60分</button>
+        <button class="btn tiny" onclick="promptSetMinutes()">入力</button>
       </div>
-
       <div class="row">
-        <button class="btn tiny danger" onclick="resetTodayTime()">今日を0分にする</button>
         <button class="btn tiny secondary" onclick="subtractMinutes(15)">-15分</button>
         <button class="btn tiny secondary" onclick="subtractMinutes(30)">-30分</button>
+        <button class="btn tiny danger" onclick="resetTodayTime()">0分にする</button>
       </div>
-
-      <p class="muted">※Stopで「今日の合計分」に加算されます（タスク別では記録しません）</p>
+      <p class="muted">※「入力」はその日の合計分を直接上書きします。</p>
     </div>
 
     <div class="row">
@@ -128,7 +120,7 @@
     </div>
   </section>
 
-  <!-- 計画（試験までのマスター） -->
+  <!-- 計画 -->
   <section id="plan" hidden>
     <div class="row">
       <h2>計画</h2>
@@ -146,7 +138,7 @@
     <div class="card">
       <h3>試験までの全タスク（締切順）</h3>
       <ul id="masterList" class="list"></ul>
-      <p class="muted">※タップ＝完了/未完了切替、右クリック(PC)＝削除（スマホは長押し）</p>
+      <p class="muted">※タップ＝完了/未完了、右クリック(PC)/長押し(スマホ)＝削除</p>
     </div>
 
     <p class="muted">※「週」タスクは週次に、「日」タスクは日次に自動で出ます（未完了のみ）。</p>
