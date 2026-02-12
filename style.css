@@ -1,221 +1,464 @@
+/* =========================
+   Base
+========================= */
 :root{
-  --bg:#ffffff;
-  --line:#e8e8e8;
-  --text:#111;
-  --muted:#666;
-  --card:#fafafa;
+  --bg:#0c0f14;
+  --card:#121826;
+  --card2:#0f1522;
+  --text:#e8edf6;
+  --muted:#aab4c5;
+  --line:#24304a;
+  --accent:#7aa2ff;
+  --accent2:#9bffd8;
+  --danger:#ff5c7a;
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
+  --radius:16px;
+  --radius2:12px;
+  --tap: rgba(122,162,255,.18);
 }
 
 *{ box-sizing:border-box; }
+html,body{ height:100%; }
 body{
   margin:0;
-  background:var(--bg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
+  background: radial-gradient(1200px 700px at 30% -10%, rgba(122,162,255,.18), transparent 55%),
+              radial-gradient(1000px 600px at 90% 10%, rgba(155,255,216,.12), transparent 55%),
+              var(--bg);
   color:var(--text);
-  font-family:-apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
-}
-.container{ padding:14px; max-width:980px; margin:0 auto; }
-
-.topbar{
-  position:sticky; top:0; z-index:5;
-  background:var(--bg);
-  border-bottom:1px solid var(--line);
-  padding:10px 12px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.tabs{ display:flex; gap:8px; flex-wrap:wrap; }
-.tab{
-  padding:10px 12px;
-  border:1px solid var(--line);
-  background:#fff;
-  border-radius:10px;
-  font-size:14px;
-}
-.tab.active{ border-color:#bbb; font-weight:700; }
+a{ color:inherit; }
 
-.row{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
-.meta{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-.badge{
-  border:1px solid var(--line);
-  background:#fff;
-  padding:6px 10px;
-  border-radius:999px;
-  font-size:12px;
+/* =========================
+   Layout
+========================= */
+.container{
+  padding: 14px 14px 26px;
+  max-width: 720px;
+  margin: 0 auto;
 }
-.list{ list-style:none; padding:0; margin:10px 0; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
-.list li{
-  padding:12px 12px;
-  border-bottom:1px solid var(--line);
-  cursor:pointer;
+
+.row{
   display:flex;
-  justify-content:space-between;
-  gap:12px;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
 }
-.list li:last-child{ border-bottom:none; }
-.done{ text-decoration:line-through; color:#888; }
-.muted{ color:var(--muted); font-size:13px; margin:6px 0; }
-.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-.btn{
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  background:#111;
-  color:#fff;
-  font-size:14px;
+.meta{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
 }
-.btn.secondary{ background:#fff; color:#111; }
-.btn.tiny{ padding:8px 10px; font-size:13px; }
 
+hr{
+  border:0;
+  height:1px;
+  background: var(--line);
+  margin: 14px 0;
+}
+
+/* =========================
+   Topbar / Tabs
+========================= */
+.topbar{
+  position: sticky;
+  top:0;
+  z-index: 10;
+  background: rgba(12,15,20,.78);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(36,48,74,.6);
+}
+
+.tabs{
+  display:flex;
+  gap:6px;
+  padding: 10px 10px;
+  overflow:auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab{
+  border: 1px solid rgba(36,48,74,.7);
+  background: rgba(18,24,38,.75);
+  color: var(--muted);
+  padding: 10px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1;
+  cursor:pointer;
+  white-space: nowrap;
+  transition: .15s;
+}
+.tab:active{ transform: translateY(1px); }
+.tab.active{
+  color: var(--text);
+  border-color: rgba(122,162,255,.9);
+  box-shadow: 0 0 0 3px rgba(122,162,255,.18) inset;
+}
+
+/* =========================
+   Headings
+========================= */
+h2{
+  margin: 8px 0;
+  font-size: 20px;
+}
+h3{
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+h4{
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--text);
+  opacity: .95;
+}
+
+.muted{ color: var(--muted); font-size: 13px; }
+.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Noto Sans Mono", "Liberation Mono", monospace; }
+
+/* =========================
+   Cards
+========================= */
 .card{
-  border:1px solid var(--line);
-  border-radius:14px;
-  padding:12px;
-  background:var(--card);
-  margin:12px 0;
+  margin-top: 12px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgba(18,24,38,.9), rgba(15,21,34,.9));
+  border: 1px solid rgba(36,48,74,.75);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
-h2,h3{ margin:6px 0; }
 
-.chips{ display:flex; gap:8px; flex-wrap:wrap; }
+.card details{
+  margin-top: 10px;
+}
+
+.card summary{
+  cursor:pointer;
+  user-select:none;
+  outline:none;
+}
+.card summary::-webkit-details-marker{ display:none; }
+
+/* =========================
+   Badges / Chips
+========================= */
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(36,48,74,.7);
+  background: rgba(15,21,34,.7);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.chips{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
 .chip{
-  border:1px solid var(--line);
-  background:#fff;
-  padding:6px 10px;
-  border-radius:999px;
-  font-size:12px;
+  display:inline-flex;
+  align-items:center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(122,162,255,.16);
+  border: 1px solid rgba(122,162,255,.25);
+  color: var(--text);
+  font-size: 12px;
 }
 
-/* Calendar */
+/* =========================
+   Buttons
+========================= */
+.btn{
+  border: 1px solid rgba(122,162,255,.55);
+  background: linear-gradient(180deg, rgba(122,162,255,.18), rgba(122,162,255,.10));
+  color: var(--text);
+  padding: 11px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: .15s;
+  box-shadow: 0 6px 18px rgba(0,0,0,.18);
+}
+.btn:active{ transform: translateY(1px); }
+.btn.secondary{
+  border-color: rgba(36,48,74,.8);
+  background: rgba(18,24,38,.55);
+  color: var(--text);
+}
+.btn.tiny{
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.btn.danger{
+  border-color: rgba(255,92,122,.55);
+  background: rgba(255,92,122,.12);
+}
+
+/* =========================
+   Lists
+========================= */
+.list{
+  list-style:none;
+  padding:0;
+  margin: 10px 0 0;
+}
+
+.list li{
+  display:flex;
+  justify-content: space-between;
+  align-items:center;
+  gap:10px;
+  padding: 12px 12px;
+  margin-top: 8px;
+  border-radius: var(--radius2);
+  border: 1px solid rgba(36,48,74,.7);
+  background: rgba(18,24,38,.55);
+  transition: .12s;
+  user-select:none;
+}
+.list li:active{
+  background: rgba(122,162,255,.10);
+  border-color: rgba(122,162,255,.25);
+}
+.list li span{
+  display:inline-flex;
+  gap:8px;
+  align-items:center;
+}
+.list li .done{
+  color: rgba(232,237,246,.55);
+  text-decoration: line-through;
+}
+
+/* =========================
+   Planner (auto assign UI)
+========================= */
+#autoWeekBox, #overflowBox, #weekDailyPreview, #dayPlanBox{
+  display: grid;
+  gap: 10px;
+}
+
+.planRow{
+  display:flex;
+  justify-content: space-between;
+  align-items:center;
+  gap:10px;
+  padding: 12px;
+  border-radius: var(--radius2);
+  border: 1px solid rgba(36,48,74,.75);
+  background: rgba(15,21,34,.58);
+}
+
+.planLeft{
+  display:flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.planTitle{
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.planSub{
+  font-size: 12px;
+  color: var(--muted);
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.planRight{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(36,48,74,.8);
+  background: rgba(18,24,38,.55);
+}
+
+.pill.accent{
+  border-color: rgba(122,162,255,.5);
+  background: rgba(122,162,255,.12);
+}
+
+.pill.danger{
+  border-color: rgba(255,92,122,.5);
+  background: rgba(255,92,122,.10);
+}
+
+.smallBtn{
+  border: 1px solid rgba(36,48,74,.8);
+  background: rgba(18,24,38,.55);
+  color: var(--text);
+  padding: 7px 10px;
+  border-radius: 10px;
+  cursor:pointer;
+}
+.smallBtn:active{ transform: translateY(1px); }
+
+.weekDayGrid{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap:10px;
+}
+
+.dayBox{
+  padding: 12px;
+  border-radius: var(--radius2);
+  border: 1px solid rgba(36,48,74,.75);
+  background: rgba(18,24,38,.45);
+}
+.dayBoxHeader{
+  display:flex;
+  justify-content: space-between;
+  align-items:center;
+  gap:10px;
+  margin-bottom: 8px;
+}
+.dayBoxHeader .title{
+  font-weight: 600;
+  font-size: 13px;
+}
+.dayBoxHeader .mins{
+  font-size: 12px;
+  color: var(--muted);
+}
+.dayBox ul{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:grid;
+  gap:8px;
+}
+.dayBox li{
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(36,48,74,.65);
+  background: rgba(15,21,34,.55);
+  display:flex;
+  justify-content: space-between;
+  gap:10px;
+}
+.dayBox li .t{
+  white-space: nowrap;
+  overflow:hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+.dayBox li .m{
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* =========================
+   Calendar (heatmap)
+========================= */
 .calendar{
   display:grid;
   grid-template-columns: repeat(7, 1fr);
   gap:8px;
-  margin-top:10px;
+  margin-top: 10px;
 }
+
 .calHead{
-  font-size:12px;
-  color:var(--muted);
   text-align:center;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 0;
 }
+
 .calCell{
-  border:1px solid var(--line);
-  border-radius:12px;
-  padding:10px;
-  min-height:64px;
-  background:#fff;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(36,48,74,.7);
+  background: rgba(18,24,38,.45);
+  min-height: 62px;
   cursor:pointer;
+  transition: .12s;
+}
+.calCell:active{ transform: translateY(1px); }
+
+.calTop{
   display:flex;
-  flex-direction:column;
-  justify-content:space-between;
+  justify-content: space-between;
+  align-items:center;
+  gap:8px;
 }
-.calTop{ display:flex; justify-content:space-between; align-items:center; }
-.calDay{ font-weight:700; }
-.calRate{ font-size:12px; color:var(--muted); }
-
-/* Rate heat colors */
-.r0{ background:#f2f2f2; }
-.r1{ background:#e9f2ff; }   /* 1-49 */
-.r2{ background:#cfe3ff; }   /* 50-79 */
-.r3{ background:#9fc7ff; }   /* 80-100 */
-
-.todayRing{ outline:2px solid #111; outline-offset:2px; }
-.outMonth{ opacity:0.45; }
-
-/* ===== Potorogy-ish Timer ===== */
-:root{
-  --poto-bg: #fff7fb;
-  --poto-ink: #3a2f2a;
-  --poto-accent: #ff8fb7;
-  --poto-accent2: #8fd3ff;
-  --poto-shadow: rgba(58,47,42,0.15);
+.calDay{
+  font-weight: 700;
+  font-size: 14px;
+}
+.calRate{
+  font-size: 12px;
+  color: var(--muted);
 }
 
-/* タイマーカード全体をちょい可愛く */
-#daily .card:has(#timerDisplay){
-  background: linear-gradient(135deg, var(--poto-bg), #ffffff);
-  border: 2px solid rgba(58,47,42,0.08);
-  box-shadow: 0 10px 25px var(--poto-shadow);
+.outMonth{
+  opacity: .45;
 }
 
-/* 右側のデジタル表示（00:00:00）を主役に */
-#timerDisplay{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  min-width: 160px;
-  padding: 10px 14px;
-
-  font-family: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
-               "M PLUS Rounded 1c", system-ui, sans-serif;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-
-  color: var(--poto-ink);
-  background: #fff;
-  border: 2px solid rgba(58,47,42,0.10);
-  border-radius: 999px;
-
-  box-shadow:
-    0 8px 0 rgba(58,47,42,0.06),
-    0 14px 30px var(--poto-shadow);
-  transform: translateY(-1px);
+.todayRing{
+  box-shadow: 0 0 0 2px rgba(122,162,255,.55) inset;
 }
 
-/* ふわっとキラキラ（疑似のシール感） */
-#timerDisplay::before{
-  content:"";
-  width: 10px;
-  height: 10px;
-  margin-right: 10px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fff, var(--poto-accent));
-  box-shadow:
-    18px 0 0 0 rgba(143,211,255,0.8),
-    36px 0 0 0 rgba(255,143,183,0.55);
-  opacity: 0.9;
+/* heat levels */
+.r0{ background: rgba(18,24,38,.35); }
+.r1{ background: rgba(122,162,255,.10); }
+.r2{ background: rgba(122,162,255,.18); }
+.r3{ background: rgba(122,162,255,.28); }
+
+/* =========================
+   Canvas (charts)
+========================= */
+canvas{
+  width: 100% !important;
+  border-radius: 14px;
+  background: rgba(15,21,34,.35);
+  border: 1px solid rgba(36,48,74,.6);
 }
 
-/* 左の「学習時間 ○分」もサブ表示っぽく */
-#todayMinutes{
-  background: rgba(255,143,183,0.12);
-  border: 2px dashed rgba(255,143,183,0.35);
-  color: var(--poto-ink);
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-family: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
-               "M PLUS Rounded 1c", system-ui, sans-serif;
-  font-weight: 800;
+/* =========================
+   Details polish
+========================= */
+details{
+  border-radius: 12px;
+}
+details[open] summary{
+  margin-bottom: 8px;
+}
+summary{
+  color: var(--text);
+  padding: 8px 0;
 }
 
-/* Start/Pause/Stopボタンを“ポップ”に */
-#daily .card:has(#timerDisplay) .btn.tiny{
-  border-radius: 999px;
-  font-weight: 900;
-  font-family: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
-               "M PLUS Rounded 1c", system-ui, sans-serif;
-  border: 2px solid rgba(58,47,42,0.10);
-  box-shadow: 0 6px 0 rgba(58,47,42,0.08);
-  transform: translateY(-1px);
-}
-
-#daily .card:has(#timerDisplay) .btn.tiny:active{
-  box-shadow: 0 2px 0 rgba(58,47,42,0.08);
-  transform: translateY(2px);
-}
-
-/* Startだけ目立たせる（既存クラスを壊さず“最初のStartボタン”を強調） */
-#daily .card:has(#timerDisplay) .row:nth-of-type(2) .btn.tiny:first-child{
-  background: linear-gradient(135deg, rgba(255,143,183,0.95), rgba(143,211,255,0.95));
-  color: #fff;
-  border-color: rgba(255,255,255,0.6);
-}
-
-/* 動いてる時に“ふわふわ”する（JSでクラスを付けられるならより良い） */
-.timer-running #timerDisplay{
-  animation: potoFloat 1.6s ease-in-out infinite;
-}
-
-@keyframes potoFloat{
-  0%,100%{ transform: translateY(-1px) rotate(-0.2deg); }
-  50%{ transform: translateY(-4px) rotate(0.2deg); }
+/* =========================
+   Mobile tweaks
+========================= */
+@media (max-width: 420px){
+  .btn{ padding: 10px 12px; }
+  .tab{ padding: 9px 11px; }
+  .calendar{ gap:6px; }
+  .calCell{ min-height: 58px; padding: 9px; }
 }
