@@ -1368,4 +1368,97 @@
     render();
   });
 
+   /* =========================
+   MASTER 一括削除機能
+   ========================= */
+
+// 選択状態を保持
+store.masterSelection ||= {};
+
+// Master描画を書き換え（チェックボックス付き）
+function renderMasterList() {
+  const ul = document.getElementById("masterList");
+  if (!ul) return;
+
+  ul.innerHTML = "";
+
+  if (!store.master || store.master.length === 0) {
+    ul.innerHTML = "<li>マスタータスクはまだありません。</li>";
+    return;
+  }
+
+  store.master.forEach((m) => {
+    const li = document.createElement("li");
+
+    const left = document.createElement("div");
+    left.style.display = "flex";
+    left.style.alignItems = "center";
+    left.style.gap = "10px";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !!store.masterSelection[m.id];
+    checkbox.onchange = () => {
+      if (checkbox.checked) {
+        store.masterSelection[m.id] = true;
+      } else {
+        delete store.masterSelection[m.id];
+      }
+    };
+
+    const text = document.createElement("span");
+    text.textContent = `[${m.type}] ${m.title} (${m.estMin}m)`;
+    if (m.done) text.classList.add("done");
+
+    left.appendChild(checkbox);
+    left.appendChild(text);
+
+    li.appendChild(left);
+    ul.appendChild(li);
+  });
+}
+
+// 一括削除
+function deleteSelectedMasters() {
+  const ids = Object.keys(store.masterSelection || {});
+  if (ids.length === 0) {
+    alert("削除するタスクを選択してください");
+    return;
+  }
+
+  if (!confirm(`選択した ${ids.length} 件を削除しますか？`)) return;
+
+  store.master = store.master.filter(m => !ids.includes(m.id));
+
+  store.masterSelection = {};
+  save();
+  renderMasterList();
+}
+
+// 全選択
+function selectAllMasters() {
+  store.master.forEach(m => {
+    store.masterSelection[m.id] = true;
+  });
+  renderMasterList();
+}
+
+// 全解除
+function clearMasterSelection() {
+  store.masterSelection = {};
+  renderMasterList();
+}
+
+// 既存render()の最後にこれ追加
+const oldRender = render;
+render = function () {
+  oldRender();
+  renderMasterList();
+};
+
+// HTMLから呼べるように
+window.deleteSelectedMasters = deleteSelectedMasters;
+window.selectAllMasters = selectAllMasters;
+window.clearMasterSelection = clearMasterSelection;
+
 })();
