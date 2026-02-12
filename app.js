@@ -793,6 +793,57 @@ window.timerStop  = timerStop;
 window.timerReset = timerReset;
 window.addMinutes = addMinutes;
 
+function setTimerRunningUI(on){
+  document.body.classList.toggle("timer-running", on);
+}
+
+function timerStart(){
+  if(timerRunning) return;
+  timerRunning = true;
+  setTimerRunningUI(true);
+  timerStartedAt = performance.now();
+  if(timerIntervalId) clearInterval(timerIntervalId);
+  timerIntervalId = setInterval(updateTimerUI, 250);
+  updateTimerUI();
+}
+
+function timerPause(){
+  if(!timerRunning) return;
+  timerAccumMs += (performance.now() - timerStartedAt);
+  timerRunning = false;
+  setTimerRunningUI(false);
+  timerStartedAt = null;
+  updateTimerUI();
+}
+
+function timerReset(){
+  timerRunning = false;
+  setTimerRunningUI(false);
+  timerStartedAt = null;
+  timerAccumMs = 0;
+  if(timerIntervalId) clearInterval(timerIntervalId);
+  timerIntervalId = null;
+  updateTimerUI();
+}
+
+function timerStop(){
+  if(timerRunning){
+    timerAccumMs += (performance.now() - timerStartedAt);
+    timerRunning = false;
+    setTimerRunningUI(false);
+    timerStartedAt = null;
+  }
+  const mins = Math.round(timerAccumMs / 60000);
+  const key = selectedDayKey || todayKey;
+
+  if(mins > 0){
+    store.dailyTime ||= {};
+    store.dailyTime[key] = (store.dailyTime[key] || 0) + mins;
+  }
+  timerReset();
+  save();
+}
+
 // ===== Run =====
 render();
 nightlyNudge();
