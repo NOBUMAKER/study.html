@@ -226,6 +226,21 @@
   </main>
 
   <!-- ===== SETTINGS MODAL ===== -->
+  <div class="divider"></div>
+
+<div class="h2">バックアップ</div>
+<div class="row gap8">
+  <button class="btn" onclick="exportBackup()">書き出し（JSON）</button>
+
+  <label class="btn ghost" style="cursor:pointer;">
+    復元（JSON）
+    <input type="file" accept="application/json" hidden
+      onchange="importBackup(this.files[0])" />
+  </label>
+
+  <button class="btn ghost danger" onclick="restoreFromSnapshot()">スナップショット復元</button>
+</div>
+<p class="muted">※自動スナップショットは端末内。JSON書き出しが一番安全。</p>
   <div class="modal" id="settingsModal" hidden>
     <div class="modalCard">
       <div class="row between">
