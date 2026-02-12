@@ -3,13 +3,10 @@ const KEY = "study_pwa_v2";
 const TYPES = ["講義","演習","復習","模試","その他"];
 
 const store = JSON.parse(localStorage.getItem(KEY)) || {
-  daily: {},     // "YYYY-MM-DD": [{text, done, type}]
-  weekly: {},    // "MONDAY_YYYY-MM-DD": { tasks: [{text, done, type}] }
+  daily: {},
+  weekly: {},
   dailyTime: {}, // "YYYY-MM-DD": minutes
-  plan: {
-    examDate: null,  // "YYYY-MM-DD"
-    master: []       // [{id,text,done,granularity:"週"|"日", due:"YYYY-MM-DD", type}]
-  }
+  plan: { examDate: null, master: [] }
 };
 store.daily ||= {};
 store.weekly ||= {};
@@ -27,7 +24,7 @@ const iso = (d) => new Date(d).toISOString().slice(0,10);
 
 function getMonday(d = new Date()) {
   const date = new Date(d);
-  const day = date.getDay() || 7; // Sun=7
+  const day = date.getDay() || 7;
   if (day !== 1) date.setDate(date.getDate() - (day - 1));
   date.setHours(12,0,0,0);
   return iso(date);
@@ -82,7 +79,7 @@ function heatClass(rate){
 const todayKey = iso(new Date());
 let selectedDayKey = todayKey;
 
-let selectedWeekKey = getMonday(); // weekly view
+let selectedWeekKey = getMonday();
 store.weekly[selectedWeekKey] ||= { tasks: [] };
 
 let calMonth = new Date();
@@ -100,8 +97,7 @@ function setActiveTab(name){
 }
 
 function show(view){
-  const ids = ["daily","weekly","plan","calendar","analytics","history"];
-  ids.forEach(id=>{
+  ["daily","weekly","plan","calendar","analytics","history"].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.hidden = (id !== view);
   });
@@ -109,17 +105,10 @@ function show(view){
   render();
 }
 
-// ===== Daily navigation =====
-function shiftDay(delta){
-  selectedDayKey = addDays(selectedDayKey, delta);
-  render();
-}
-function goToday(){
-  selectedDayKey = todayKey;
-  render();
-}
+// ===== Navigation =====
+function shiftDay(delta){ selectedDayKey = addDays(selectedDayKey, delta); render(); }
+function goToday(){ selectedDayKey = todayKey; render(); }
 
-// ===== Weekly navigation =====
 function shiftWeek(delta){
   selectedWeekKey = addDays(selectedWeekKey, delta * 7);
   store.weekly[selectedWeekKey] ||= { tasks: [] };
@@ -131,16 +120,8 @@ function goThisWeek(){
   render();
 }
 
-// ===== Calendar navigation =====
-function shiftMonth(delta){
-  calMonth = addMonths(calMonth, delta);
-  render();
-}
-function goThisMonth(){
-  calMonth = new Date();
-  calMonth.setDate(1);
-  render();
-}
+function shiftMonth(delta){ calMonth = addMonths(calMonth, delta); render(); }
+function goThisMonth(){ calMonth = new Date(); calMonth.setDate(1); render(); }
 
 // ===== Task add/toggle =====
 function pickType(defaultType="演習"){
@@ -159,7 +140,6 @@ function pickType(defaultType="演習"){
 function addTask(type){
   const text = prompt("タスク内容");
   if(!text) return;
-
   const taskType = pickType("演習");
 
   if(type === "daily"){
@@ -188,18 +168,15 @@ function toggle(type, idx){
 function clearDone(type){
   if(!confirm("完了済みを削除しますか？")) return;
   if(type === "daily"){
-    const list = store.daily[selectedDayKey] || [];
-    store.daily[selectedDayKey] = list.filter(t => !t.done);
+    store.daily[selectedDayKey] = (store.daily[selectedDayKey] || []).filter(t => !t.done);
   } else {
-    const list = store.weekly[selectedWeekKey]?.tasks || [];
-    store.weekly[selectedWeekKey].tasks = list.filter(t => !t.done);
+    store.weekly[selectedWeekKey].tasks = (store.weekly[selectedWeekKey]?.tasks || []).filter(t => !t.done);
   }
   save();
 }
 
 function deleteTask(type, idx){
   if(!confirm("このタスクを削除しますか？")) return;
-
   if(type === "daily"){
     const list = store.daily[selectedDayKey] || [];
     list.splice(idx, 1);
@@ -213,33 +190,16 @@ function deleteTask(type, idx){
 }
 
 // ===== History helpers =====
-function listWeeksSorted(){
-  const keys = Object.keys(store.weekly);
-  keys.sort();
-  return keys;
-}
-function listDaysSorted(){
-  const keys = Object.keys(store.daily);
-  keys.sort();
-  return keys;
-}
-function goWeekFromHistory(weekKey){
-  selectedWeekKey = weekKey;
-  store.weekly[selectedWeekKey] ||= { tasks: [] };
-  show("weekly");
-}
-function goDayFromCalendar(dayKey){
-  selectedDayKey = dayKey;
-  show("daily");
-}
+function listWeeksSorted(){ return Object.keys(store.weekly).sort(); }
+function listDaysSorted(){ return Object.keys(store.daily).sort(); }
+function goWeekFromHistory(weekKey){ selectedWeekKey = weekKey; store.weekly[selectedWeekKey] ||= { tasks: [] }; show("weekly"); }
+function goDayFromCalendar(dayKey){ selectedDayKey = dayKey; show("daily"); }
 
 // ===== Streak =====
 const STREAK_THRESHOLD = 50;
-
 function calcStreak(){
   let streak = 0;
   let d = todayKey;
-
   while(true){
     const list = store.daily[d];
     if(!list || list.length === 0) break;
@@ -256,7 +216,6 @@ function typeCounts(list){
   const counts = {};
   TYPES.forEach(t=>counts[t]=0);
   counts["その他"] ||= 0;
-
   (list||[]).forEach(t=>{
     const k = TYPES.includes(t.type) ? t.type : "その他";
     counts[k] += 1;
@@ -282,20 +241,56 @@ function renderChips(el, counts){
   }
 }
 
+// ===== Study time (manual only) =====
+function addMinutes(mins){
+  const key = selectedDayKey || todayKey;
+  store.dailyTime[key] = (store.dailyTime[key] || 0) + mins;
+  save();
+}
+function subtractMinutes(mins){
+  const key = selectedDayKey || todayKey;
+  const cur = store.dailyTime[key] || 0;
+  store.dailyTime[key] = Math.max(0, cur - mins);
+  save();
+}
+function resetTodayTime(){
+  const key = selectedDayKey || todayKey;
+  if(!confirm("この日の学習時間を0分にしますか？")) return;
+  store.dailyTime[key] = 0;
+  save();
+}
+function promptSetMinutes(){
+  const key = selectedDayKey || todayKey;
+  const cur = store.dailyTime[key] || 0;
+  const raw = prompt("学習時間（分）を入力（合計を上書き）", String(cur));
+  if(raw === null) return;
+  const n = parseInt(raw, 10);
+  if(!Number.isFinite(n) || n < 0){
+    alert("0以上の数字を入力してください。");
+    return;
+  }
+  store.dailyTime[key] = n;
+  save();
+}
+function fmtHours(mins){
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if(h === 0) return `${m}分`;
+  if(m === 0) return `${h}時間`;
+  return `${h}時間${m}分`;
+}
+
 // ===== Notifications =====
 function nightlyNudge(){
   const hour = new Date().getHours();
   if(hour < 20) return;
-
   const list = store.daily[todayKey] || [];
   if(list.length === 0) return;
-
   const r = rateOf(list);
   if(r === null) return;
 
   const nudgedKey = "nudged_" + todayKey;
   if(localStorage.getItem(nudgedKey) === "1") return;
-
   localStorage.setItem(nudgedKey, "1");
 
   const undone = list.filter(t=>!t.done).length;
@@ -333,96 +328,8 @@ function setNotifStatus(msg){
   if(el) el.textContent = msg;
 }
 
-// ===== Study Time (daily total) =====
-let timerRunning = false;
-let timerStartedAt = null;
-let timerAccumMs = 0;
-let timerIntervalId = null;
-
-function fmtTime(ms){
-  const total = Math.floor(ms / 1000);
-  const h = String(Math.floor(total / 3600)).padStart(2,"0");
-  const m = String(Math.floor((total % 3600) / 60)).padStart(2,"0");
-  const s = String(total % 60).padStart(2,"0");
-  return `${h}:${m}:${s}`;
-}
-
-function updateTimerUI(){
-  const el = document.getElementById("timerDisplay");
-  if(!el) return;
-  const ms = timerAccumMs + (timerRunning ? (performance.now() - timerStartedAt) : 0);
-  el.textContent = fmtTime(ms);
-}
-
-function timerStart(){
-  if(timerRunning) return;
-  timerRunning = true;
-  timerStartedAt = performance.now();
-  if(timerIntervalId) clearInterval(timerIntervalId);
-  timerIntervalId = setInterval(updateTimerUI, 250);
-  updateTimerUI();
-}
-
-function timerPause(){
-  if(!timerRunning) return;
-  timerAccumMs += (performance.now() - timerStartedAt);
-  timerRunning = false;
-  timerStartedAt = null;
-  updateTimerUI();
-}
-
-function timerReset(){
-  timerRunning = false;
-  timerStartedAt = null;
-  timerAccumMs = 0;
-  if(timerIntervalId) clearInterval(timerIntervalId);
-  timerIntervalId = null;
-  updateTimerUI();
-}
-
-function timerStop(){
-  if(timerRunning){
-    timerAccumMs += (performance.now() - timerStartedAt);
-    timerRunning = false;
-    timerStartedAt = null;
-  }
-  const mins = Math.round(timerAccumMs / 60000);
-  const key = selectedDayKey || todayKey;
-
-  if(mins > 0){
-    store.dailyTime ||= {};
-    store.dailyTime[key] = (store.dailyTime[key] || 0) + mins;
-  }
-  timerReset();
-  save();
-}
-
-function addMinutes(mins){
-  const key = selectedDayKey || todayKey;
-  store.dailyTime ||= {};
-  store.dailyTime[key] = (store.dailyTime[key] || 0) + mins;
-  save();
-}
-
-function subtractMinutes(mins){
-  const key = selectedDayKey || todayKey;
-  store.dailyTime ||= {};
-  const current = store.dailyTime[key] || 0;
-  store.dailyTime[key] = Math.max(0, current - mins);
-  save();
-}
-
-function resetTodayTime(){
-  const key = selectedDayKey || todayKey;
-  if(!confirm("今日の学習時間を0分にしますか？")) return;
-  store.dailyTime[key] = 0;
-  save();
-}
-
-// ===== Plan (Exam + Master tasks) =====
-function uid(){
-  return Math.random().toString(16).slice(2) + Date.now().toString(16);
-}
+// ===== Plan =====
+function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 
 function setExamDate(){
   const cur = store.plan.examDate || "";
@@ -441,7 +348,6 @@ function addMasterTask(){
     alert("先に試験日を設定してください。");
     return;
   }
-
   const text = prompt("マスタータスク内容");
   if(!text) return;
 
@@ -456,14 +362,7 @@ function addMasterTask(){
 
   const taskType = pickType("演習");
 
-  store.plan.master.push({
-    id: uid(),
-    text,
-    done: false,
-    granularity,
-    due,
-    type: taskType
-  });
+  store.plan.master.push({ id: uid(), text, done:false, granularity, due, type: taskType });
   save();
 }
 
@@ -487,7 +386,7 @@ function buildDailySeries(days=30){
   const labels = [];
   const values = [];
   last.forEach(k=>{
-    labels.push(k.slice(5)); // MM-DD
+    labels.push(k.slice(5));
     const r = rateOf(store.daily[k] || []);
     values.push(r===null ? null : r);
   });
@@ -500,7 +399,7 @@ function buildWeeklySeries(weeks=12){
   const labels = [];
   const values = [];
   last.forEach(k=>{
-    labels.push(k.slice(5)); // MM-DD
+    labels.push(k.slice(5));
     const r = rateOf(store.weekly[k]?.tasks || []);
     values.push(r===null ? null : r);
   });
@@ -601,8 +500,8 @@ function renderCalendar(){
   const first = new Date(y, m, 1);
   const firstIso = iso(first);
 
-  const jsDay = first.getDay(); // 0 Sun..6 Sat
-  const idx = (jsDay + 6) % 7;  // Mon=0
+  const jsDay = first.getDay();
+  const idx = (jsDay + 6) % 7;
   const startIso = addDays(firstIso, -idx);
 
   for(let i=0; i<42; i++){
@@ -644,7 +543,7 @@ function renderCalendar(){
 
 // ===== Render =====
 function render(){
-  // ===== Daily =====
+  // Daily
   const dailyDate = document.getElementById("dailyDate");
   if(dailyDate) dailyDate.textContent = selectedDayKey;
 
@@ -658,6 +557,9 @@ function render(){
   const tm = document.getElementById("todayMinutes");
   if(tm) tm.textContent = `学習時間 ${mins}分`;
 
+  const th = document.getElementById("todayHours");
+  if(th) th.textContent = `(${fmtHours(mins)})`;
+
   const streak = calcStreak();
   const streakBadge = document.getElementById("streakBadge");
   if(streakBadge) streakBadge.textContent = streak>0 ? `🔥 ${streak}日連続` : "🔥 0日";
@@ -666,8 +568,8 @@ function render(){
   if(dailyList){
     dailyList.innerHTML = "";
 
-    // --- Auto daily tasks (from plan) ---
-    const autoDaily = (store.plan.master || [])
+    // Auto daily from plan
+    const autoDaily = store.plan.master
       .filter(t => !t.done && t.granularity==="日" && t.due === selectedDayKey);
 
     if(autoDaily.length){
@@ -678,76 +580,48 @@ function render(){
 
       autoDaily.forEach(t=>{
         const li = document.createElement("li");
-
         const left = document.createElement("span");
-        left.textContent = `【${t.type || "その他"}】 ${t.text}（締切:${t.due}）`;
-
+        left.textContent = `【${t.type||"その他"}】 ${t.text}（締切:${t.due}）`;
         const right = document.createElement("span");
         right.textContent = "◻︎";
+        li.appendChild(left); li.appendChild(right);
 
-        li.appendChild(left);
-        li.appendChild(right);
-
-        // tap = done toggle
-        // long press = delete
-        let pressTimer = null;
-        let longPressed = false;
-
+        let pressTimer=null, longPressed=false;
         li.addEventListener("pointerdown", ()=>{
-          longPressed = false;
-          pressTimer = setTimeout(()=>{
-            longPressed = true;
-            deleteMaster(t.id);
-          }, 600);
+          longPressed=false;
+          pressTimer=setTimeout(()=>{ longPressed=true; deleteMaster(t.id); },600);
         });
         li.addEventListener("pointerup", ()=>{
           if(pressTimer) clearTimeout(pressTimer);
           if(!longPressed) toggleMaster(t.id);
         });
-        li.addEventListener("pointerleave", ()=>{
-          if(pressTimer) clearTimeout(pressTimer);
-        });
-
-        // PC右クリックでも削除
+        li.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
         li.oncontextmenu = (e)=>{ e.preventDefault(); deleteMaster(t.id); };
 
         dailyList.appendChild(li);
       });
     }
 
-    // --- Manual daily tasks ---
+    // Manual daily
     daily.forEach((t,i)=>{
       const li = document.createElement("li");
-
       const left = document.createElement("span");
       left.textContent = `【${t.type || "その他"}】 ${t.text}`;
       if(t.done) left.className = "done";
-
       const right = document.createElement("span");
       right.textContent = t.done ? "〇" : "";
+      li.appendChild(left); li.appendChild(right);
 
-      li.appendChild(left);
-      li.appendChild(right);
-
-      let pressTimer = null;
-      let longPressed = false;
-
+      let pressTimer=null, longPressed=false;
       li.addEventListener("pointerdown", ()=>{
-        longPressed = false;
-        pressTimer = setTimeout(()=>{
-          longPressed = true;
-          deleteTask("daily", i);
-        }, 600);
+        longPressed=false;
+        pressTimer=setTimeout(()=>{ longPressed=true; deleteTask("daily", i); },600);
       });
-
       li.addEventListener("pointerup", ()=>{
         if(pressTimer) clearTimeout(pressTimer);
         if(!longPressed) toggle("daily", i);
       });
-
-      li.addEventListener("pointerleave", ()=>{
-        if(pressTimer) clearTimeout(pressTimer);
-      });
+      li.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
 
       dailyList.appendChild(li);
     });
@@ -755,7 +629,7 @@ function render(){
 
   renderChips(document.getElementById("dailyTypeSummary"), typeCounts(daily));
 
-  // ===== Weekly =====
+  // Weekly
   store.weekly[selectedWeekKey] ||= { tasks: [] };
   const weekly = store.weekly[selectedWeekKey].tasks || [];
 
@@ -770,8 +644,7 @@ function render(){
   if(weeklyList){
     weeklyList.innerHTML = "";
 
-    // --- Auto weekly tasks (from plan) ---
-    const autoWeekly = (store.plan.master || [])
+    const autoWeekly = store.plan.master
       .filter(t => !t.done && t.granularity==="週" && inWeek(t.due, selectedWeekKey));
 
     if(autoWeekly.length){
@@ -782,73 +655,47 @@ function render(){
 
       autoWeekly.forEach(t=>{
         const li = document.createElement("li");
-
         const left = document.createElement("span");
-        left.textContent = `【${t.type || "その他"}】 ${t.text}（締切:${t.due}）`;
-
+        left.textContent = `【${t.type||"その他"}】 ${t.text}（締切:${t.due}）`;
         const right = document.createElement("span");
         right.textContent = "◻︎";
+        li.appendChild(left); li.appendChild(right);
 
-        li.appendChild(left);
-        li.appendChild(right);
-
-        let pressTimer = null;
-        let longPressed = false;
-
+        let pressTimer=null, longPressed=false;
         li.addEventListener("pointerdown", ()=>{
-          longPressed = false;
-          pressTimer = setTimeout(()=>{
-            longPressed = true;
-            deleteMaster(t.id);
-          }, 600);
+          longPressed=false;
+          pressTimer=setTimeout(()=>{ longPressed=true; deleteMaster(t.id); },600);
         });
         li.addEventListener("pointerup", ()=>{
           if(pressTimer) clearTimeout(pressTimer);
           if(!longPressed) toggleMaster(t.id);
         });
-        li.addEventListener("pointerleave", ()=>{
-          if(pressTimer) clearTimeout(pressTimer);
-        });
-
+        li.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
         li.oncontextmenu = (e)=>{ e.preventDefault(); deleteMaster(t.id); };
 
         weeklyList.appendChild(li);
       });
     }
 
-    // --- Manual weekly tasks ---
     weekly.forEach((t,i)=>{
       const li = document.createElement("li");
-
       const left = document.createElement("span");
       left.textContent = `【${t.type || "その他"}】 ${t.text}`;
       if(t.done) left.className = "done";
-
       const right = document.createElement("span");
       right.textContent = t.done ? "〇" : "";
+      li.appendChild(left); li.appendChild(right);
 
-      li.appendChild(left);
-      li.appendChild(right);
-
-      let pressTimer = null;
-      let longPressed = false;
-
+      let pressTimer=null, longPressed=false;
       li.addEventListener("pointerdown", ()=>{
-        longPressed = false;
-        pressTimer = setTimeout(()=>{
-          longPressed = true;
-          deleteTask("weekly", i);
-        }, 600);
+        longPressed=false;
+        pressTimer=setTimeout(()=>{ longPressed=true; deleteTask("weekly", i); },600);
       });
-
       li.addEventListener("pointerup", ()=>{
         if(pressTimer) clearTimeout(pressTimer);
         if(!longPressed) toggle("weekly", i);
       });
-
-      li.addEventListener("pointerleave", ()=>{
-        if(pressTimer) clearTimeout(pressTimer);
-      });
+      li.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
 
       weeklyList.appendChild(li);
     });
@@ -856,7 +703,7 @@ function render(){
 
   renderChips(document.getElementById("weeklyTypeSummary"), typeCounts(weekly));
 
-  // ===== Plan =====
+  // Plan
   const examLabel = document.getElementById("examDateLabel");
   const daysLeftEl = document.getElementById("examDaysLeft");
   const masterListEl = document.getElementById("masterList");
@@ -864,17 +711,10 @@ function render(){
   if(examLabel && daysLeftEl && masterListEl){
     const ex = store.plan.examDate;
     examLabel.textContent = ex ? `試験日: ${ex}` : "試験日: 未設定";
-
-    if(ex){
-      const left = daysBetween(todayKey, ex);
-      daysLeftEl.textContent = `残り ${left}日`;
-    }else{
-      daysLeftEl.textContent = "";
-    }
+    daysLeftEl.textContent = ex ? `残り ${daysBetween(todayKey, ex)}日` : "";
 
     masterListEl.innerHTML = "";
-    const items = (store.plan.master || []).slice().sort((a,b)=>a.due.localeCompare(b.due));
-
+    const items = store.plan.master.slice().sort((a,b)=>a.due.localeCompare(b.due));
     if(items.length===0){
       const li = document.createElement("li");
       li.textContent = "まだマスタータスクがありません。";
@@ -882,37 +722,23 @@ function render(){
     }else{
       items.forEach(t=>{
         const li = document.createElement("li");
-
         const left = document.createElement("span");
         left.textContent = `【${t.granularity}】【${t.type||"その他"}】${t.text}（締切:${t.due}）`;
         if(t.done) left.className = "done";
-
         const right = document.createElement("span");
         right.textContent = t.done ? "〇" : "";
+        li.appendChild(left); li.appendChild(right);
 
-        li.appendChild(left);
-        li.appendChild(right);
-
-        // tap = toggle
-        // long press = delete
-        let pressTimer = null;
-        let longPressed = false;
-
+        let pressTimer=null, longPressed=false;
         li.addEventListener("pointerdown", ()=>{
-          longPressed = false;
-          pressTimer = setTimeout(()=>{
-            longPressed = true;
-            deleteMaster(t.id);
-          }, 600);
+          longPressed=false;
+          pressTimer=setTimeout(()=>{ longPressed=true; deleteMaster(t.id); },600);
         });
         li.addEventListener("pointerup", ()=>{
           if(pressTimer) clearTimeout(pressTimer);
           if(!longPressed) toggleMaster(t.id);
         });
-        li.addEventListener("pointerleave", ()=>{
-          if(pressTimer) clearTimeout(pressTimer);
-        });
-
+        li.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
         li.oncontextmenu = (e)=>{ e.preventDefault(); deleteMaster(t.id); };
 
         masterListEl.appendChild(li);
@@ -920,10 +746,10 @@ function render(){
     }
   }
 
-  // ===== Calendar =====
+  // Calendar
   renderCalendar();
 
-  // ===== History - weeks =====
+  // History (weeks)
   const hw = document.getElementById("historyWeeks");
   if(hw){
     hw.innerHTML = "";
@@ -941,15 +767,14 @@ function render(){
         left.textContent = weekRangeLabel(k);
         const right = document.createElement("span");
         right.textContent = r===null ? "" : `${r}%`;
-        li.appendChild(left);
-        li.appendChild(right);
+        li.appendChild(left); li.appendChild(right);
         li.onclick = ()=>goWeekFromHistory(k);
         hw.appendChild(li);
       });
     }
   }
 
-  // ===== History - days =====
+  // History (days)
   const hd = document.getElementById("historyDays");
   if(hd){
     hd.innerHTML = "";
@@ -967,30 +792,25 @@ function render(){
         left.textContent = k;
         const right = document.createElement("span");
         right.textContent = r===null ? "" : `${r}%`;
-        li.appendChild(left);
-        li.appendChild(right);
+        li.appendChild(left); li.appendChild(right);
         li.onclick = ()=>{ selectedDayKey = k; show("daily"); };
         hd.appendChild(li);
       });
     }
   }
 
-  // ===== Charts =====
+  // Charts
   if(window.Chart) updateCharts();
 
-  // ===== Notification status + shortcut URL =====
+  // Notification + shortcut URL
   if("Notification" in window){
     setNotifStatus("通知状態: " + Notification.permission);
   } else {
     setNotifStatus("通知状態: 未対応");
   }
-
   const url = `${location.origin}${location.pathname}?open=daily`;
   const sEl = document.getElementById("shortcutUrl");
   if(sEl) sEl.textContent = url;
-
-  // timer ui update
-  updateTimerUI();
 }
 
 // ===== Deep link =====
@@ -1025,14 +845,11 @@ window.clearDone = clearDone;
 window.requestNotif = requestNotif;
 window.testNotif = testNotif;
 
-// timer
-window.timerStart = timerStart;
-window.timerPause = timerPause;
-window.timerStop  = timerStop;
-window.timerReset = timerReset;
+// time (manual)
 window.addMinutes = addMinutes;
 window.subtractMinutes = subtractMinutes;
 window.resetTodayTime = resetTodayTime;
+window.promptSetMinutes = promptSetMinutes;
 
 // plan
 window.setExamDate = setExamDate;
