@@ -1,190 +1,109 @@
-/* =========================
-   Apple-ish Task List UI
-   ========================= */
-
+/* ===== Notion-ish ===== */
 :root{
-  --bg: #0b0b0f;
-  --card: rgba(255,255,255,.06);
-  --card2: rgba(255,255,255,.08);
-  --stroke: rgba(255,255,255,.10);
-  --stroke2: rgba(255,255,255,.14);
-  --text: rgba(255,255,255,.92);
+  --bg: #0f1115;
+  --panel: rgba(255,255,255,.045);
+  --panel2: rgba(255,255,255,.03);
+  --line: rgba(255,255,255,.08);
+  --text: rgba(255,255,255,.9);
   --muted: rgba(255,255,255,.62);
 
-  --accent: #5dd6ff;
-  --good: #34c759;
-  --warn: #ffcc00;
-  --danger: #ff3b30;
+  --radius: 14px;
+  --shadow: 0 10px 24px rgba(0,0,0,.22);
 
-  --radius: 18px;
-  --shadow: 0 18px 40px rgba(0,0,0,.35);
+  --tagBg: rgba(255,255,255,.06);
+  --tagLine: rgba(255,255,255,.10);
 }
 
-/* ベース */
+/* 全体 */
 body{
-  background: radial-gradient(1200px 800px at 20% -10%, rgba(93,214,255,.18), transparent 55%),
-              radial-gradient(900px 700px at 100% 0%, rgba(52,199,89,.12), transparent 55%),
-              var(--bg);
+  background: var(--bg);
   color: var(--text);
 }
 
-/* card */
+/* Cardは“箱感”弱め */
 .card{
-  background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.05));
-  border: 1px solid var(--stroke);
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  overflow: hidden;
 }
 
-/* list container */
+/* 見出し：Notionっぽく控えめ */
+.h1{ font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+.h2{ font-size: 14px; font-weight: 700; letter-spacing: .2px; }
+.muted{ color: var(--muted); }
+
+/* リスト：テーブルっぽく */
 .list{
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* ===== Task Row (Apple Reminders style) ===== */
-.taskRow{
+.list > li{
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 12px;
-  border-top: 1px solid var(--stroke);
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.taskRow:first-child{ border-top: none; }
-
-.taskRow:hover{
-  background: rgba(255,255,255,.04);
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: transparent;
 }
 
-.taskCheck{
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 1.6px solid rgba(255,255,255,.32);
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  cursor: pointer;
-  background: rgba(0,0,0,.08);
-}
-.taskCheck svg{
-  width: 14px;
-  height: 14px;
-  opacity: 0;
-  transform: scale(.85);
-  transition: .12s ease;
-  fill: white;
-}
-.taskRow.done .taskCheck{
-  background: rgba(52,199,89,.92);
-  border-color: rgba(52,199,89,.92);
-}
-.taskRow.done .taskCheck svg{
-  opacity: 1;
-  transform: scale(1);
+.list > li:first-child{
+  border-top: none;
 }
 
-.taskMain{
-  min-width: 0;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.taskTitle{
-  font-size: 14.8px;
-  line-height: 1.25;
-  letter-spacing: .1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.taskMeta{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 12.2px;
+.list > li:hover{
+  background: var(--panel2);
 }
 
-.badgePill{
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--stroke2);
-  background: rgba(255,255,255,.06);
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.badgeType{
-  border-color: rgba(93,214,255,.28);
-  color: rgba(93,214,255,.95);
-  background: rgba(93,214,255,.12);
-}
-
-.badgeMin{
-  border-color: rgba(255,255,255,.16);
-}
-
-.taskActions{
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.iconMini{
-  width: 34px;
-  height: 30px;
-  border-radius: 10px;
-  border: 1px solid var(--stroke);
-  background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.86);
-  cursor: pointer;
-}
-.iconMini:active{ transform: scale(.98); }
-.iconMini.danger{
-  border-color: rgba(255,59,48,.35);
-  background: rgba(255,59,48,.14);
-}
-
-/* Done state */
-.taskRow.done .taskTitle{
+/* Done */
+.done{
   text-decoration: line-through;
-  opacity: .62;
+  opacity: .55;
 }
 
-/* section header inside card */
+/* 右側の〇表示はやめて、チェックBOXっぽく */
+.list > li span:last-child{
+  opacity: .0; /* 既存の "〇" を見せない */
+}
+
+/* タグ（タイプ） */
+.badge, .pill{
+  border: 1px solid var(--tagLine);
+  background: var(--tagBg);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* “今日の割当/手動”のヘッダ（あなたのPro HTML内の見出し用） */
 .sectionHead{
-  padding: 12px 12px 10px;
-  border-bottom: 1px solid var(--stroke);
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  background: rgba(255,255,255,.03);
-}
-.sectionHead .left{
-  display:flex; flex-direction:column; gap:2px;
-}
-.sectionHead .title{
-  font-weight: 750;
-  letter-spacing: .2px;
-}
-.sectionHead .sub{
-  color: var(--muted);
-  font-size: 12px;
-}
-.sectionHead .right{
-  display:flex; align-items:center; gap:8px;
-  color: var(--muted);
-  font-size: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
 }
 
-/* compact list (review etc) */
-.list.compact .taskRow{ padding: 10px 12px; }
+/* ボタン：Notion風（フラット） */
+.btn{
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.05);
+  color: var(--text);
+  border-radius: 10px;
+}
+.btn.ghost{
+  background: transparent;
+}
+.btn.primary{
+  background: rgba(255,255,255,.10);
+}
+.btn:active{ transform: scale(.99); }
+
+/* 入力 */
+.input, .select{
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  border-radius: 10px;
+}
