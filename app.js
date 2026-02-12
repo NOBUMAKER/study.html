@@ -1,58 +1,65 @@
 /* ==========================================================
-   Study Log Pro (app.js) v4  — 全置き換え版
-   ✅ 自動割当なし
-   ✅ Master → 今週へ追加（選択して積む）
-   ✅ 今週タスク → 今日以降に一括振り分け（ボタン）
-   ✅ 週タスク：一括完了 / 一括削除（選択があれば選択だけ、なければ全て）
-   ✅ 今日：Week由来タスク と 手動タスク を別表示
-   ✅ 復習のタイミング：何回目の復習か表示（1回目/2回目…）
-   ✅ データは localStorage に保持（改善しても消えにくい：KEY固定 + マイグレーション）
+   Study Log Pro (app.js) vFinal — 全置き換え版
+   - 自動割当なし
+   - Master → 今週へ追加（チェック選択）
+   - 今週 → 今日以降へ一括振り分け（ボタン）
+   - 週タスク 一括削除 / 一括完了（選択があれば選択のみ）
+   - 今日：Week由来タスク / 手動タスク を別表示
+   - 復習：何回目の復習か表示（1回目/2回目…）
+   - データ保持：KEY固定 + 旧KEY取り込み（初回だけ）
    ========================================================== */
 
-const KEY = "study_log_pro_v4";        // ★ここは変えない（データ保持の要）
+const KEY = "study_log_pro_v_final"; // ★変えない（データ保持の要）
+const LEGACY_KEYS = ["study_pwa_v2", "study_pwa_v3", "study_log_pro_v4", "study_log_pro"]; // 旧キー吸い上げ
 const TYPES = ["講義","演習","復習","模試","その他"];
 
 const DEFAULT_SETTINGS = {
-  examDate: null,              // "YYYY-MM-DD"
-  weeklyCapMinutes: 900,       // 週の学習可能時間（分）※表示用
-  reviewOffsets: [1,3,7,14],   // 復習オフセット（日）
+  examDate: null,            // "YYYY-MM-DD"
+  weeklyCapMinutes: 900,     // 週の容量（分）表示用
+  reviewOffsets: [1,3,7,14], // 復習オフセット（日）
 };
 
 const store = loadStore();
 
-// ---------- Storage ----------
+/* ---------------- Storage ---------------- */
 function loadStore(){
   let raw = null;
   try { raw = JSON.parse(localStorage.getItem(KEY)); } catch(e){ raw = null; }
-  const s = raw && typeof raw === "object" ? raw : {};
-  s._v ||= 4;
 
-  // legacy互換（あなたが以前使ってたKEYから移行したい場合だけ）
-  // 旧KEYがあるなら初回だけ取り込む（消さない）
-  const legacyKeys = ["study_pwa_v2","study_log_pro"];
-  for(const lk of legacyKeys){
-    if(!localStorage.getItem(KEY) && localStorage.getItem(lk)){
+  // 新KEYが無ければ、旧KEYから最初に見つかったものを移植
+  if(!raw){
+    for(const lk of LEGACY_KEYS){
+      const v = localStorage.getItem(lk);
+      if(!v) continue;
       try{
-        const old = JSON.parse(localStorage.getItem(lk));
+        const old = JSON.parse(v);
         if(old && typeof old === "object"){
-          // ざっくり移植
-          s.daily ||= old.daily || {};
-          s.weekly ||= old.weekly || {};
-          s.master ||= old.master || [];
-          s.logs ||= old.logs || {};
-          s.settings ||= old.settings || {};
+          raw = old;
+          break;
         }
       }catch(e){}
     }
   }
 
+  const s = raw && typeof raw === "object" ? raw : {};
+  s._v ||= "final";
+
   s.settings ||= {};
   s.settings = { ...DEFAULT_SETTINGS, ...s.settings };
 
-  s.daily ||= {};   // {"YYYY-MM-DD": [{id,text,type,done,origin,createdAt,doneAt}]}
-  s.weekly ||= {};  // {"YYYY-MM-DD(monday)": {tasks:[...]}}
-  s.master ||= [];  // [{id,title,type,estMin,done,createdAt}]
-  s.logs ||= {};    // {"YYYY-MM-DD": {studyMin:number}}
+  s.daily ||= {};     // {"YYYY-MM-DD": [{id,text,type,done,origin,createdAt,doneAt,fromWeekId?}]}
+  s.weekly ||= {};    // {"YYYY-MM-DD(monday)": {tasks:[{id,text,type,done,selected,createdAt,doneAt,fromMasterId?}]}}
+  s.master ||= [];    // [{id,title,type,estMin,done,selected,createdAt}]
+  s.logs ||= {};      // {"YYYY-MM-DD": {studyMin:number}}
+
+  // v2の日次時間が残ってたらlogsに移す（あれば）
+  if(s.dailyTime && typeof s.dailyTime === "object"){
+    for(const [d, mins] of Object.entries(s.dailyTime)){
+      s.logs[d] ||= { studyMin: 0 };
+      s.logs[d].studyMin = (Number(s.logs[d].studyMin)||0) + (Number(mins)||0);
+    }
+    delete s.dailyTime;
+  }
 
   return s;
 }
@@ -61,7 +68,7 @@ function saveStore(){
   localStorage.setItem(KEY, JSON.stringify(store));
 }
 
-// ---------- Date utils ----------
+/* ---------------- Date utils ---------------- */
 const iso = (d) => new Date(d).toISOString().slice(0,10);
 
 function addDays(isoDate, n){
@@ -93,45 +100,29 @@ function daysOfWeek(mondayIso){
   return Array.from({length:7}, (_,i)=>addDays(mondayIso, i));
 }
 
-function uid(prefix="t"){
-  return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
-}
-
 function sameWeek(dayIso, mondayIso){
   return getMonday(new Date(dayIso + "T12:00:00")) === mondayIso;
 }
 
-// ---------- State ----------
+function uid(prefix="t"){
+  return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
+}
+
+/* ---------------- State ---------------- */
 const todayKey = iso(new Date());
 let selectedDayKey = todayKey;
-let selectedWeekKey = getMonday();
-let calMonth = new Date(); calMonth.setDate(1);
 
+let selectedWeekKey = getMonday();
 store.weekly[selectedWeekKey] ||= { tasks: [] };
 
-// ---------- Helpers ----------
-function getStudyMin(dayIso){
-  return Number(store.logs?.[dayIso]?.studyMin || 0) || 0;
-}
-function setStudyMin(dayIso, mins){
-  store.logs ||= {};
-  store.logs[dayIso] ||= { studyMin: 0 };
-  store.logs[dayIso].studyMin = Math.max(0, mins|0);
-}
+let calMonth = new Date();
+calMonth.setDate(1);
 
-function getDailyTasks(dayIso){
-  store.daily[dayIso] ||= [];
-  return store.daily[dayIso];
-}
-
-function getWeekTasks(weekKey){
-  store.weekly[weekKey] ||= { tasks: [] };
-  store.weekly[weekKey].tasks ||= [];
-  return store.weekly[weekKey].tasks;
-}
+/* ---------------- DOM helpers ---------------- */
+const $ = (id) => document.getElementById(id);
 
 function rateOf(list){
-  if(!list || list.length === 0) return null;
+  if(!list || list.length===0) return null;
   const done = list.filter(x=>x.done).length;
   return Math.round(done / list.length * 100);
 }
@@ -144,20 +135,42 @@ function heatClass(rate){
   return "r3";
 }
 
-function parseOffsetsInput(v){
-  if(!v) return [...DEFAULT_SETTINGS.reviewOffsets];
-  return String(v)
-    .split(/[,\s]+/)
-    .map(x=>parseInt(x,10))
-    .filter(n=>Number.isFinite(n) && n>0)
-    .slice(0, 20);
+function pickType(defaultType="演習"){
+  const msg =
+    "タイプを選んで番号を入力:\n" +
+    TYPES.map((t,i)=>`${i+1}) ${t}`).join("\n") +
+    `\n\n(空欄なら ${defaultType})`;
+  const raw = prompt(msg, "");
+  const n = parseInt(raw, 10);
+  if(!raw) return defaultType;
+  if(Number.isFinite(n) && n>=1 && n<=TYPES.length) return TYPES[n-1];
+  if(TYPES.includes(raw)) return raw;
+  return defaultType;
 }
 
-// ---------- Tabs ----------
+/* ---------------- Data getters ---------------- */
+function getDailyTasks(dayIso){
+  store.daily[dayIso] ||= [];
+  return store.daily[dayIso];
+}
+function getWeekTasks(weekKey){
+  store.weekly[weekKey] ||= { tasks: [] };
+  store.weekly[weekKey].tasks ||= [];
+  return store.weekly[weekKey].tasks;
+}
+function getStudyMin(dayIso){
+  return Number(store.logs?.[dayIso]?.studyMin || 0) || 0;
+}
+function setStudyMin(dayIso, mins){
+  store.logs ||= {};
+  store.logs[dayIso] ||= { studyMin: 0 };
+  store.logs[dayIso].studyMin = Math.max(0, mins|0);
+}
+
+/* ---------------- Tabs ---------------- */
 function setActiveTab(name){
-  // Pro HTMLは tabDaily/tabWeekly/tabMaster/tabCalendar/tabHistory
   ["Daily","Weekly","Master","Calendar","History"].forEach(x=>{
-    const b = document.getElementById("tab"+x);
+    const b = $("tab"+x);
     if(!b) return;
     b.classList.toggle("active", x.toLowerCase() === name);
   });
@@ -165,14 +178,14 @@ function setActiveTab(name){
 
 function show(view){
   ["daily","weekly","master","calendar","history"].forEach(id=>{
-    const el = document.getElementById(id);
+    const el = $(id);
     if(el) el.hidden = (id !== view);
   });
   setActiveTab(view);
   render();
 }
 
-// ---------- Navigation ----------
+/* ---------------- Navigation ---------------- */
 function shiftDay(delta){ selectedDayKey = addDays(selectedDayKey, delta); render(); }
 function goToday(){ selectedDayKey = todayKey; render(); }
 
@@ -190,21 +203,64 @@ function goThisWeek(){
 function shiftMonth(delta){ calMonth = addMonths(calMonth, delta); render(); }
 function goThisMonth(){ calMonth = new Date(); calMonth.setDate(1); render(); }
 
-// ---------- Daily: add/toggle/delete ----------
+/* ---------------- Settings modal ---------------- */
+function openSettings(){
+  const m = $("settingsModal");
+  if(!m) return;
+  m.hidden = false;
+
+  const examEl = $("examDateInput");
+  const capEl  = $("weeklyCapInput");
+  const offEl  = $("reviewOffsetsInput");
+
+  if(examEl) examEl.value = store.settings.examDate || "";
+  if(capEl)  capEl.value  = String(store.settings.weeklyCapMinutes ?? DEFAULT_SETTINGS.weeklyCapMinutes);
+  if(offEl)  offEl.value  = (store.settings.reviewOffsets || DEFAULT_SETTINGS.reviewOffsets).join(",");
+
+  setTimeout(()=>examEl?.focus?.(), 0);
+}
+function closeSettings(){
+  const m = $("settingsModal");
+  if(!m) return;
+  m.hidden = true;
+}
+function saveSettings(){
+  const examEl = $("examDateInput");
+  const capEl  = $("weeklyCapInput");
+  const offEl  = $("reviewOffsetsInput");
+
+  const exam = examEl?.value || "";
+  const cap  = Math.max(0, parseInt(capEl?.value || "0", 10) || 0);
+
+  const offs = (offEl?.value || "")
+    .split(/[,\s]+/)
+    .map(x=>parseInt(x,10))
+    .filter(n=>Number.isFinite(n) && n>0)
+    .slice(0, 20);
+
+  if(exam) store.settings.examDate = exam;
+  store.settings.weeklyCapMinutes = cap;
+  store.settings.reviewOffsets = offs.length ? offs : [...DEFAULT_SETTINGS.reviewOffsets];
+
+  saveAndRender();
+  closeSettings();
+}
+
+/* ---------------- Daily actions ---------------- */
 function addManualTask(){
   const text = prompt("今日の手動タスク（内容）");
   if(!text) return;
   const type = pickType("演習");
-  const t = {
+
+  getDailyTasks(selectedDayKey).push({
     id: uid("d"),
-    text,
+    text: text.trim(),
     type,
     done: false,
-    origin: "manual",         // manual / week
+    origin: "manual",     // manual / week
     createdAt: iso(new Date()),
     doneAt: null
-  };
-  getDailyTasks(selectedDayKey).push(t);
+  });
   saveAndRender();
 }
 
@@ -233,22 +289,38 @@ function deleteDaily(id){
   saveAndRender();
 }
 
-// ---------- Weekly: add/toggle/delete + selection ----------
+/* ---------------- Minutes ---------------- */
+function addMinutes(){
+  const input = $("minsInput");
+  const v = parseInt(input?.value || "0", 10) || 0;
+  if(input) input.value = "";
+  if(v<=0) return;
+
+  setStudyMin(selectedDayKey, getStudyMin(selectedDayKey) + v);
+  saveAndRender();
+}
+function resetDayMinutes(){
+  if(!confirm("今日の学習時間を0分にしますか？")) return;
+  setStudyMin(selectedDayKey, 0);
+  saveAndRender();
+}
+
+/* ---------------- Weekly actions ---------------- */
 function addWeekTask(){
   const text = prompt("今週タスク（内容）");
   if(!text) return;
   const type = pickType("演習");
-  const t = {
+
+  getWeekTasks(selectedWeekKey).push({
     id: uid("w"),
-    text,
+    text: text.trim(),
     type,
     done: false,
+    selected: false,
     createdAt: iso(new Date()),
     doneAt: null,
-    selected: false,
     fromMasterId: null,
-  };
-  getWeekTasks(selectedWeekKey).push(t);
+  });
   saveAndRender();
 }
 
@@ -284,11 +356,12 @@ function setWeekSelected(id, yes){
   saveAndRender(false);
 }
 
-// 一括完了 / 削除（選択があれば選択だけ、なければ全）
+// 一括完了：選択があれば選択のみ、なければ全
 function bulkCompleteWeek(){
   const list = getWeekTasks(selectedWeekKey);
   const picked = list.some(x=>x.selected) ? list.filter(x=>x.selected) : list;
   if(picked.length===0) return;
+
   picked.forEach(t=>{
     t.done = true;
     t.doneAt = iso(new Date());
@@ -297,6 +370,7 @@ function bulkCompleteWeek(){
   saveAndRender();
 }
 
+// 一括削除：選択があれば選択のみ、なければ全
 function bulkDeleteWeek(){
   const list = getWeekTasks(selectedWeekKey);
   const hasSel = list.some(x=>x.selected);
@@ -308,7 +382,7 @@ function bulkDeleteWeek(){
   saveAndRender();
 }
 
-// 今週タスク → 今日以降に振り分け（未完了だけ）
+// 今週タスク（未完了）→ 今日以降へ振り分け（round-robin）
 function bulkMoveWeekToToday(){
   const weekTasks = getWeekTasks(selectedWeekKey);
   const pool = weekTasks.filter(t=>!t.done);
@@ -318,20 +392,18 @@ function bulkMoveWeekToToday(){
     return;
   }
 
-  // 今日がこの週に含まれるなら今日から、違う週ならその週の月曜から
   const start = sameWeek(todayKey, selectedWeekKey) ? todayKey : selectedWeekKey;
-
   const days = daysOfWeek(selectedWeekKey).filter(d=>d >= start);
+
   if(days.length===0){
     alert("振り分け先の日がありません。");
     return;
   }
 
-  // round-robinで日割り
   let i = 0;
-  for(const t of pool){
+  pool.forEach(t=>{
     const day = days[i % days.length];
-    const dTask = {
+    getDailyTasks(day).push({
       id: uid("d"),
       text: t.text,
       type: t.type,
@@ -341,37 +413,33 @@ function bulkMoveWeekToToday(){
       doneAt: null,
       fromWeekId: t.id,
       fromMasterId: t.fromMasterId || null
-    };
-    getDailyTasks(day).push(dTask);
+    });
     i++;
-  }
+  });
 
-  // 今週側は、移したものを削除（※残したいならここを done=true にする運用もOK）
+  // 今週側は「doneだけ残す」運用（移した未完了は削除）
   store.weekly[selectedWeekKey].tasks = weekTasks.filter(t=>t.done);
-
   saveAndRender();
-  alert(`今週タスクを ${days[0]} 以降に振り分けました（${pool.length}件）`);
+  alert(`今週タスクを ${days[0]} 以降へ振り分けました（${pool.length}件）`);
 }
 
-// ---------- Master: add/toggle/delete + pick to week ----------
+/* ---------------- Master actions ---------------- */
 function addMasterTask(){
-  const title = prompt("Masterタスク名（例: FAR Ch 5 講義）");
+  const title = prompt("Masterタスク名（例：FAR Ch 5 講義）");
   if(!title) return;
   const type = pickType("講義");
-
   const est = prompt("推定時間（分・任意）", "60");
   const estMin = Math.max(0, parseInt(est||"0",10) || 0);
 
-  const m = {
+  store.master.push({
     id: uid("m"),
     title: title.trim(),
     type,
     estMin,
     done: false,
+    selected: false,
     createdAt: iso(new Date()),
-    selected: false
-  };
-  store.master.push(m);
+  });
   saveAndRender();
 }
 
@@ -398,9 +466,7 @@ function editMaster(id){
   m.title = v.trim() || m.title;
 
   const est = prompt("推定時間（分・任意）", String(m.estMin||0));
-  if(est!==null){
-    m.estMin = Math.max(0, parseInt(est||"0",10) || 0);
-  }
+  if(est!==null) m.estMin = Math.max(0, parseInt(est||"0",10) || 0);
 
   m.type = pickType(m.type || "講義");
   saveAndRender();
@@ -412,13 +478,12 @@ function deleteMaster(id){
   saveAndRender();
 }
 
-// Masterから今週へ追加（選択UI：画面上のチェックでも、promptでもOK）
+// Masterから今週へ追加（チェック選択 or prompt）
 function openWeeklyPickMaster(){
-  // 1) 画面上チェックがあればそれを優先
-  const selected = store.master.filter(m=>m.selected && !m.done);
+  // 画面チェックがあれば優先
+  let pick = store.master.filter(m=>m.selected && !m.done);
 
-  if(selected.length===0){
-    // 2) promptで番号選択
+  if(pick.length===0){
     const open = store.master.filter(m=>!m.done);
     if(open.length===0){
       alert("未完了のMasterがありません。");
@@ -430,94 +495,34 @@ function openWeeklyPickMaster(){
     const idxs = raw.split(/[,\s]+/).map(x=>parseInt(x,10)-1).filter(i=>Number.isFinite(i) && i>=0 && i<open.length);
     if(idxs.length===0) return;
     idxs.forEach(i=>open[i].selected = true);
+    pick = store.master.filter(m=>m.selected && !m.done);
   }
 
-  const pick = store.master.filter(m=>m.selected && !m.done);
-  if(pick.length===0) return;
-
-  const weekTasks = getWeekTasks(selectedWeekKey);
+  const week = getWeekTasks(selectedWeekKey);
   pick.forEach(m=>{
-    weekTasks.push({
+    week.push({
       id: uid("w"),
       text: m.title,
       type: m.type,
       done: false,
+      selected: false,
       createdAt: iso(new Date()),
       doneAt: null,
-      selected: false,
       fromMasterId: m.id
     });
-    m.selected = false; // 解除
+    m.selected = false;
   });
 
   saveAndRender();
 }
 
-// ---------- Study minutes (manual) ----------
-function addMinutes(){
-  const el = document.getElementById("minsInput");
-  const v = parseInt(el?.value || "0", 10) || 0;
-  if(el) el.value = "";
-  if(v<=0) return;
-
-  setStudyMin(selectedDayKey, getStudyMin(selectedDayKey) + v);
-  saveAndRender();
-}
-
-function resetDayMinutes(){
-  if(!confirm("今日の学習時間を0分にしますか？")) return;
-  setStudyMin(selectedDayKey, 0);
-  saveAndRender();
-}
-
-// ---------- Settings modal ----------
-function openSettings(){
-  const m = document.getElementById("settingsModal");
-  if(!m) return;
-  m.hidden = false;
-
-  const examEl = document.getElementById("examDateInput");
-  const capEl  = document.getElementById("weeklyCapInput");
-  const offEl  = document.getElementById("reviewOffsetsInput");
-
-  if(examEl) examEl.value = store.settings.examDate || "";
-  if(capEl)  capEl.value  = String(store.settings.weeklyCapMinutes ?? DEFAULT_SETTINGS.weeklyCapMinutes);
-  if(offEl)  offEl.value  = (store.settings.reviewOffsets || DEFAULT_SETTINGS.reviewOffsets).join(",");
-
-  setTimeout(()=>examEl?.focus?.(), 0);
-}
-
-function closeSettings(){
-  const m = document.getElementById("settingsModal");
-  if(!m) return;
-  m.hidden = true;
-}
-
-function saveSettings(){
-  const examEl = document.getElementById("examDateInput");
-  const capEl  = document.getElementById("weeklyCapInput");
-  const offEl  = document.getElementById("reviewOffsetsInput");
-
-  const exam = examEl?.value || "";
-  const cap  = Math.max(0, parseInt(capEl?.value || "0", 10) || 0);
-  const offs = parseOffsetsInput(offEl?.value || "");
-
-  if(exam) store.settings.examDate = exam;
-  store.settings.weeklyCapMinutes = cap;
-  store.settings.reviewOffsets = offs;
-
-  saveAndRender();
-  closeSettings();
-}
-
-// ---------- Review timing (表示だけ：今日分) ----------
+/* ---------------- Review timing (today) ---------------- */
 function buildTodayReviews(dayIso){
   const offs = store.settings.reviewOffsets || DEFAULT_SETTINGS.reviewOffsets;
   const out = [];
 
-  // doneAtが入ってる日次タスク（講義/演習）を起点にする
-  const allDays = Object.keys(store.daily).sort();
-  for(const d of allDays){
+  const dayKeys = Object.keys(store.daily).sort();
+  for(const d of dayKeys){
     const list = store.daily[d] || [];
     for(const t of list){
       if(!t.done || !t.doneAt) continue;
@@ -531,7 +536,6 @@ function buildTodayReviews(dayIso){
           title: `復習（${idx+1}回目 / ${offs.length}）: ${t.text}`,
           n: idx+1,
           total: offs.length,
-          sourceId: t.id
         });
       });
     }
@@ -539,16 +543,16 @@ function buildTodayReviews(dayIso){
   return out;
 }
 
-// ---------- Calendar ----------
+/* ---------------- Calendar ---------------- */
 const WEEKDAYS = ["月","火","水","木","金","土","日"];
 
 function renderCalendar(){
-  const grid = document.getElementById("calendarGrid");
+  const grid = $("calendarGrid");
   if(!grid) return;
 
   const y = calMonth.getFullYear();
   const m = calMonth.getMonth();
-  const lab = document.getElementById("calMonthLabel");
+  const lab = $("calMonthLabel");
   if(lab) lab.textContent = `${y}年 ${m+1}月`;
 
   grid.innerHTML = "";
@@ -561,8 +565,8 @@ function renderCalendar(){
 
   const first = new Date(y, m, 1);
   const firstIso = iso(first);
-  const jsDay = first.getDay();     // 0 Sun .. 6 Sat
-  const idx = (jsDay + 6) % 7;      // Mon=0..Sun=6
+  const jsDay = first.getDay(); // 0 Sun .. 6 Sat
+  const idx = (jsDay + 6) % 7;  // Mon=0..Sun=6
   const startIso = addDays(firstIso, -idx);
 
   for(let i=0;i<42;i++){
@@ -603,102 +607,9 @@ function renderCalendar(){
   }
 }
 
-// ---------- UI helpers ----------
-function pickType(defaultType="演習"){
-  const msg =
-    "タイプを選んで番号を入力:\n" +
-    TYPES.map((t,i)=>`${i+1}) ${t}`).join("\n") +
-    `\n\n(空欄なら ${defaultType})`;
-  const raw = prompt(msg, "");
-  const n = parseInt(raw, 10);
-  if(!raw) return defaultType;
-  if(Number.isFinite(n) && n>=1 && n<=TYPES.length) return TYPES[n-1];
-  if(TYPES.includes(raw)) return raw;
-  return defaultType;
-}
-
-function el(id){ return document.getElementById(id); }
-
-function renderListItem({text, done, onToggle, onEdit, onDelete, checkbox, onSelect}){
-  const li = document.createElement("li");
-  li.className = "row between";
-
-  const left = document.createElement("div");
-  left.className = "row gap8";
-  left.style.alignItems = "center";
-
-  if(checkbox){
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = !!checkbox.checked;
-    cb.addEventListener("click", (e)=>{ e.stopPropagation(); onSelect?.(cb.checked); });
-    left.appendChild(cb);
-  }
-
-  const span = document.createElement("span");
-  span.textContent = text;
-  if(done) span.classList.add("done");
-  left.appendChild(span);
-
-  const right = document.createElement("div");
-  right.className = "row gap8";
-
-  const bEdit = document.createElement("button");
-  bEdit.className = "iconBtn";
-  bEdit.textContent = "✎";
-  bEdit.title = "編集";
-  bEdit.addEventListener("click", (e)=>{ e.stopPropagation(); onEdit?.(); });
-
-  const bDel = document.createElement("button");
-  bDel.className = "iconBtn";
-  bDel.textContent = "🗑";
-  bDel.title = "削除";
-  bDel.addEventListener("click", (e)=>{ e.stopPropagation(); onDelete?.(); });
-
-  right.appendChild(bEdit);
-  right.appendChild(bDel);
-
-  li.appendChild(left);
-  li.appendChild(right);
-
-  li.addEventListener("click", ()=>onToggle?.());
-
-  return li;
-}
-
-// ---------- Render ----------
-function render(){
-  // header countdown
-  renderExamCountdown();
-
-  // DAILY
-  el("dailyDate") && (el("dailyDate").textContent = selectedDayKey);
-
-  const list = getDailyTasks(selectedDayKey);
-  const weekOnToday = list.filter(t=>t.origin==="week");
-  const manualToday = list.filter(t=>t.origin!=="week");
-
-  renderDailyLists(weekOnToday, manualToday);
-  renderTodayMinutes();
-
-  // reviews
-  renderTodayReview();
-
-  // WEEKLY
-  renderWeekly();
-
-  // MASTER
-  renderMaster();
-
-  // CALENDAR
-  renderCalendar();
-
-  // HISTORY
-  renderHistory();
-}
-
+/* ---------------- Render UI ---------------- */
 function renderExamCountdown(){
-  const pill = el("examCountdown");
+  const pill = $("examCountdown");
   if(!pill) return;
 
   const ex = store.settings.examDate;
@@ -712,20 +623,31 @@ function renderExamCountdown(){
   pill.textContent = diff >= 0 ? `Exam: ${diff} days` : `Exam: passed`;
 }
 
-function renderDailyLists(weekTasks, manualTasks){
-  const autoUl = el("dailyAutoList");
-  const manUl  = el("dailyManualList");
+function renderDaily(){
+  $("dailyDate") && ($("dailyDate").textContent = selectedDayKey);
 
+  const list = getDailyTasks(selectedDayKey);
+  const weekOnToday = list.filter(t=>t.origin==="week");
+  const manualToday = list.filter(t=>t.origin!=="week");
+
+  const meta = $("dailyMeta");
+  if(meta){
+    const r = rateOf(list);
+    meta.textContent = list.length ? `達成率 ${r}%（${list.filter(t=>t.done).length}/${list.length}）` : "—";
+  }
+
+  // auto枠（今週由来）
+  const autoUl = $("dailyAutoList");
   if(autoUl){
     autoUl.innerHTML = "";
-    if(weekTasks.length===0){
+    if(weekOnToday.length===0){
       const li = document.createElement("li");
       li.className = "muted";
       li.textContent = "（今週から振り分けたタスクはまだありません）";
       autoUl.appendChild(li);
-    }else{
-      weekTasks.forEach(t=>{
-        autoUl.appendChild(renderListItem({
+    } else {
+      weekOnToday.forEach(t=>{
+        autoUl.appendChild(makeRowItem({
           text:`【${t.type}】 ${t.text}`,
           done:t.done,
           onToggle:()=>toggleDaily(t.id),
@@ -736,16 +658,18 @@ function renderDailyLists(weekTasks, manualTasks){
     }
   }
 
+  // manual枠
+  const manUl = $("dailyManualList");
   if(manUl){
     manUl.innerHTML = "";
-    if(manualTasks.length===0){
+    if(manualToday.length===0){
       const li = document.createElement("li");
       li.className = "muted";
       li.textContent = "（手動タスクはまだありません）";
       manUl.appendChild(li);
-    }else{
-      manualTasks.forEach(t=>{
-        manUl.appendChild(renderListItem({
+    } else {
+      manualToday.forEach(t=>{
+        manUl.appendChild(makeRowItem({
           text:`【${t.type}】 ${t.text}`,
           done:t.done,
           onToggle:()=>toggleDaily(t.id),
@@ -756,81 +680,71 @@ function renderDailyLists(weekTasks, manualTasks){
     }
   }
 
-  const meta = el("dailyMeta");
-  if(meta){
-    const r = rateOf(listAllForMeta(selectedDayKey));
-    const done = listAllForMeta(selectedDayKey).filter(t=>t.done).length;
-    const total = listAllForMeta(selectedDayKey).length;
-    meta.textContent = total ? `達成率 ${r}%（${done}/${total}）` : "—";
-  }
-}
-
-function listAllForMeta(dayIso){
-  return getDailyTasks(dayIso);
-}
-
-function renderTodayMinutes(){
-  const tm = el("todayMinutes");
+  // minutes
+  const tm = $("todayMinutes");
   if(tm) tm.textContent = `学習時間 ${getStudyMin(selectedDayKey)}分`;
-}
 
-function renderTodayReview(){
-  const ul = el("todayReviewList");
-  const hint = el("reviewHint");
-  if(!ul) return;
-
+  // reviews
   const reviews = buildTodayReviews(selectedDayKey);
-  ul.innerHTML = "";
+  const hint = $("reviewHint");
+  if(hint) hint.textContent = reviews.length ? `${reviews.length}件` : "—";
 
-  if(reviews.length===0){
-    const li = document.createElement("li");
-    li.className = "muted";
-    li.textContent = "今日は復習タスクなし";
-    ul.appendChild(li);
-    if(hint) hint.textContent = "—";
-    return;
+  const rUl = $("todayReviewList");
+  if(rUl){
+    rUl.innerHTML = "";
+    if(reviews.length===0){
+      const li = document.createElement("li");
+      li.className = "muted";
+      li.textContent = "今日は復習タスクなし";
+      rUl.appendChild(li);
+    }else{
+      reviews.forEach(r=>{
+        const li = document.createElement("li");
+        li.textContent = r.title;
+        rUl.appendChild(li);
+      });
+    }
   }
-
-  reviews.forEach(r=>{
-    const li = document.createElement("li");
-    li.textContent = r.title;
-    ul.appendChild(li);
-  });
-
-  if(hint) hint.textContent = `${reviews.length}件`;
 }
 
 function renderWeekly(){
-  const weekLabel = el("weekLabel");
-  const weekMeta  = el("weekMeta");
+  const weekLabel = $("weekLabel");
   if(weekLabel) weekLabel.textContent = weekRangeLabel(selectedWeekKey);
 
+  const weekMeta = $("weekMeta");
   const tasks = getWeekTasks(selectedWeekKey);
-
   if(weekMeta){
     const r = rateOf(tasks);
-    const done = tasks.filter(t=>t.done).length;
-    const total = tasks.length;
-    weekMeta.textContent = total ? `達成率 ${r}%（${done}/${total}）` : "—";
+    weekMeta.textContent = tasks.length ? `達成率 ${r}%（${tasks.filter(t=>t.done).length}/${tasks.length}）` : "—";
   }
 
-  // board (weeklyAutoBoard) は「日別割当」の代わりに今週タスク表示に使う
-  const board = el("weeklyAutoBoard");
+  // KPI
+  const cap = Number(store.settings.weeklyCapMinutes ?? DEFAULT_SETTINGS.weeklyCapMinutes) || 0;
+  const assigned = tasks.filter(t=>!t.done).reduce((a,t)=>a + (Number(t.estMin)||0), 0);
+  const remain = Math.max(0, cap - assigned);
+  $("weeklyCap") && ($("weeklyCap").textContent = `${cap}m`);
+  $("weeklyAssigned") && ($("weeklyAssigned").textContent = `${assigned}m`);
+  $("weeklyRemain") && ($("weeklyRemain").textContent = `${remain}m`);
+
+  // weeklyAutoBoard を「今週タスク一覧」に利用
+  const board = $("weeklyAutoBoard");
   if(board){
     board.innerHTML = "";
 
-    // 上部に「＋追加」簡易ボタンを差し込み（HTMLに無くても動く）
-    const top = document.createElement("div");
-    top.className = "row gap8";
-    top.style.marginBottom = "10px";
+    // 操作バー（HTMLにないのでJSで足す）
+    const bar = document.createElement("div");
+    bar.className = "row gap8";
+    bar.style.marginBottom = "12px";
+    bar.style.flexWrap = "wrap";
 
-    const btnAdd = document.createElement("button");
-    btnAdd.className = "btn";
-    btnAdd.textContent = "＋今週タスク追加";
-    btnAdd.onclick = addWeekTask;
+    const b1 = mkBtn("＋今週タスク追加", "btn", addWeekTask);
+    const b2 = mkBtn("Masterから今週へ追加", "btn primary", openWeeklyPickMaster);
+    const b3 = mkBtn("今週→今日以降へ振り分け", "btn", bulkMoveWeekToToday);
+    const b4 = mkBtn("選択/全を一括完了", "btn ghost", bulkCompleteWeek);
+    const b5 = mkBtn("選択/全を一括削除", "btn ghost danger", bulkDeleteWeek);
 
-    top.appendChild(btnAdd);
-    board.appendChild(top);
+    [b1,b2,b3,b4,b5].forEach(b=>bar.appendChild(b));
+    board.appendChild(bar);
 
     if(tasks.length===0){
       const p = document.createElement("div");
@@ -842,43 +756,27 @@ function renderWeekly(){
 
     const ul = document.createElement("ul");
     ul.className = "list";
-
     tasks.forEach(t=>{
-      ul.appendChild(renderListItem({
+      ul.appendChild(makeRowItem({
         text:`【${t.type}】 ${t.text}`,
         done:t.done,
         onToggle:()=>toggleWeek(t.id),
         onEdit:()=>editWeek(t.id),
         onDelete:()=>deleteWeek(t.id),
-        checkbox:{checked:!!t.selected},
+        checkbox:{ checked:!!t.selected },
         onSelect:(yes)=>setWeekSelected(t.id, yes),
       }));
     });
-
     board.appendChild(ul);
-  }
-
-  // KPI
-  const capEl = el("weeklyCap");
-  const asgEl = el("weeklyAssigned");
-  const remEl = el("weeklyRemain");
-
-  if(capEl || asgEl || remEl){
-    const cap = Number(store.settings.weeklyCapMinutes ?? DEFAULT_SETTINGS.weeklyCapMinutes) || 0;
-    const assigned = tasks.filter(t=>!t.done).reduce((a,t)=>a + (Number(t.estMin)||0), 0);
-    const remain = Math.max(0, cap - assigned);
-    if(capEl) capEl.textContent = `${cap}m`;
-    if(asgEl) asgEl.textContent = `${assigned}m`;
-    if(remEl) remEl.textContent = `${remain}m`;
   }
 }
 
 function renderMaster(){
-  const ul = el("masterList");
+  const ul = $("masterList");
   if(!ul) return;
 
-  const q = (el("masterSearch")?.value || "").trim().toLowerCase();
-  const filt = (el("masterFilter")?.value || "all");
+  const q = ($("masterSearch")?.value || "").trim().toLowerCase();
+  const f = ($("masterFilter")?.value || "all");
 
   let list = [...store.master];
 
@@ -888,10 +786,24 @@ function renderMaster(){
       (m.type||"").toLowerCase().includes(q)
     );
   }
-  if(filt==="open") list = list.filter(m=>!m.done);
-  if(filt==="done") list = list.filter(m=>m.done);
+  if(f==="open") list = list.filter(m=>!m.done);
+  if(f==="done") list = list.filter(m=>m.done);
 
   ul.innerHTML = "";
+
+  // 操作バー（HTMLにないので上に差し込み）
+  const bar = document.createElement("li");
+  bar.style.listStyle = "none";
+  bar.style.padding = "0";
+  const wrap = document.createElement("div");
+  wrap.className = "row gap8";
+  wrap.style.flexWrap = "wrap";
+  wrap.style.marginBottom = "10px";
+
+  wrap.appendChild(mkBtn("＋Master追加", "btn primary", addMasterTask));
+  wrap.appendChild(mkBtn("選択Master→今週へ追加", "btn", openWeeklyPickMaster));
+  bar.appendChild(wrap);
+  ul.appendChild(bar);
 
   if(list.length===0){
     const li = document.createElement("li");
@@ -915,7 +827,7 @@ function renderMaster(){
     cb.addEventListener("click", (e)=>{ e.stopPropagation(); setMasterSelected(m.id, cb.checked); });
 
     const title = document.createElement("span");
-    title.textContent = `【${m.type}】 ${m.title}${m.estMin?` (${m.estMin}m)`:""}`;
+    title.textContent = `【${m.type}】 ${m.title}${m.estMin?` (${m.estMin}m)`:``}`;
     if(m.done) title.classList.add("done");
 
     left.appendChild(cb);
@@ -924,23 +836,9 @@ function renderMaster(){
     const right = document.createElement("div");
     right.className = "row gap8";
 
-    const doneBtn = document.createElement("button");
-    doneBtn.className = "iconBtn";
-    doneBtn.textContent = m.done ? "↩︎" : "✓";
-    doneBtn.title = m.done ? "未完了に戻す" : "完了";
-    doneBtn.addEventListener("click", (e)=>{ e.stopPropagation(); toggleMasterDone(m.id); });
-
-    const editBtn = document.createElement("button");
-    editBtn.className = "iconBtn";
-    editBtn.textContent = "✎";
-    editBtn.title = "編集";
-    editBtn.addEventListener("click", (e)=>{ e.stopPropagation(); editMaster(m.id); });
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "iconBtn";
-    delBtn.textContent = "🗑";
-    delBtn.title = "削除";
-    delBtn.addEventListener("click", (e)=>{ e.stopPropagation(); deleteMaster(m.id); });
+    const doneBtn = mkIconBtn(m.done ? "↩︎" : "✓", m.done ? "未完了に戻す" : "完了", ()=>toggleMasterDone(m.id));
+    const editBtn = mkIconBtn("✎", "編集", ()=>editMaster(m.id));
+    const delBtn  = mkIconBtn("🗑", "削除", ()=>deleteMaster(m.id));
 
     right.appendChild(doneBtn);
     right.appendChild(editBtn);
@@ -954,8 +852,7 @@ function renderMaster(){
 }
 
 function renderHistory(){
-  // weeks
-  const hw = el("historyWeeks");
+  const hw = $("historyWeeks");
   if(hw){
     const keys = Object.keys(store.weekly).sort().reverse();
     hw.innerHTML = "";
@@ -982,8 +879,7 @@ function renderHistory(){
     }
   }
 
-  // days
-  const hd = el("historyDays");
+  const hd = $("historyDays");
   if(hd){
     const keys = Object.keys(store.daily).sort().slice(-14).reverse();
     hd.innerHTML = "";
@@ -994,8 +890,8 @@ function renderHistory(){
       hd.appendChild(li);
     }else{
       keys.forEach(k=>{
-        const tasks = store.daily[k] || [];
-        const r = rateOf(tasks);
+        const list = store.daily[k] || [];
+        const r = rateOf(list);
         const li = document.createElement("li");
         li.className = "row between";
         const l = document.createElement("span");
@@ -1011,35 +907,95 @@ function renderHistory(){
   }
 }
 
-// ---------- Save & Render ----------
-function saveAndRender(needRender=true){
-  saveStore();
-  if(needRender) render();
+/* ---------------- UI components ---------------- */
+function mkBtn(text, className, fn){
+  const b = document.createElement("button");
+  b.className = className;
+  b.type = "button";
+  b.textContent = text;
+  b.onclick = fn;
+  return b;
 }
 
-// ---------- No-op (HTMLに残ってても壊れないように) ----------
-function rebuildAuto(){
-  alert("自動割当はオフにしました（この版では未使用）");
+function mkIconBtn(text, title, fn){
+  const b = document.createElement("button");
+  b.className = "iconBtn";
+  b.type = "button";
+  b.textContent = text;
+  b.title = title;
+  b.onclick = (e)=>{ e.stopPropagation(); fn?.(); };
+  return b;
 }
-function seedDemo(){
-  alert("この版は自動割当なしのため、テンプレ投入は未実装です（必要なら作る）");
+
+function makeRowItem({text, done, onToggle, onEdit, onDelete, checkbox, onSelect}){
+  const li = document.createElement("li");
+  li.className = "row between";
+
+  const left = document.createElement("div");
+  left.className = "row gap8";
+  left.style.alignItems = "center";
+
+  if(checkbox){
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!checkbox.checked;
+    cb.addEventListener("click", (e)=>{ e.stopPropagation(); onSelect?.(cb.checked); });
+    left.appendChild(cb);
+  }
+
+  const span = document.createElement("span");
+  span.textContent = text;
+  if(done) span.classList.add("done");
+  left.appendChild(span);
+
+  const right = document.createElement("div");
+  right.className = "row gap8";
+
+  right.appendChild(mkIconBtn("✎","編集", onEdit));
+  right.appendChild(mkIconBtn("🗑","削除", onDelete));
+
+  li.appendChild(left);
+  li.appendChild(right);
+
+  li.addEventListener("click", ()=>onToggle?.());
+  return li;
 }
+
+/* ---------------- Save & Render ---------------- */
+function saveAndRender(doRender=true){
+  saveStore();
+  if(doRender) render();
+}
+
+/* ---------------- Main render ---------------- */
+function render(){
+  renderExamCountdown();
+  renderDaily();
+  renderWeekly();
+  renderMaster();
+  renderCalendar();
+  renderHistory();
+}
+
+/* ---------------- No-op for old HTML hooks ---------------- */
+function rebuildAuto(){ alert("自動割り当てはこの版では使いません。"); }
+function seedDemo(){ alert("この版はテンプレ投入は未実装です（必要なら追加します）。"); }
 function wipeAll(){
   if(!confirm("全データ削除しますか？（localStorageが空になります）")) return;
   localStorage.removeItem(KEY);
   location.reload();
 }
 
-// ---------- Wire header settings ----------
+/* ---------------- Wire events ---------------- */
 document.addEventListener("DOMContentLoaded", ()=>{
-  const btn = el("btnSettings");
+  const btn = $("btnSettings");
   if(btn) btn.addEventListener("click", openSettings);
 
-  // 初期表示：Daily
+  // 初期タブ
   show("daily");
 });
 
-// ---------- Expose to HTML (onclick用) ----------
+/* ---------------- Expose for HTML onclick ---------------- */
 window.show = show;
 
 window.shiftDay = shiftDay;
@@ -1059,16 +1015,17 @@ window.addManualTask = addManualTask;
 window.addMinutes = addMinutes;
 window.resetDayMinutes = resetDayMinutes;
 
-window.addMasterTask = addMasterTask;
-
+window.addWeekTask = addWeekTask;
 window.openWeeklyPickMaster = openWeeklyPickMaster;
 window.bulkMoveWeekToToday = bulkMoveWeekToToday;
 window.bulkCompleteWeek = bulkCompleteWeek;
 window.bulkDeleteWeek = bulkDeleteWeek;
 
+window.addMasterTask = addMasterTask;
+
 window.rebuildAuto = rebuildAuto;
 window.seedDemo = seedDemo;
 window.wipeAll = wipeAll;
 
-// ---------- First render ----------
+/* ---------------- Run ---------------- */
 render();
