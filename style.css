@@ -119,3 +119,103 @@ h2,h3{ margin:6px 0; }
 
 .todayRing{ outline:2px solid #111; outline-offset:2px; }
 .outMonth{ opacity:0.45; }
+
+/* ===== Potorogy-ish Timer ===== */
+:root{
+  --poto-bg: #fff7fb;
+  --poto-ink: #3a2f2a;
+  --poto-accent: #ff8fb7;
+  --poto-accent2: #8fd3ff;
+  --poto-shadow: rgba(58,47,42,0.15);
+}
+
+/* タイマーカード全体をちょい可愛く */
+#daily .card:has(#timerDisplay){
+  background: linear-gradient(135deg, var(--poto-bg), #ffffff);
+  border: 2px solid rgba(58,47,42,0.08);
+  box-shadow: 0 10px 25px var(--poto-shadow);
+}
+
+/* 右側のデジタル表示（00:00:00）を主役に */
+#timerDisplay{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 160px;
+  padding: 10px 14px;
+
+  font-family: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
+               "M PLUS Rounded 1c", system-ui, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+
+  color: var(--poto-ink);
+  background: #fff;
+  border: 2px solid rgba(58,47,42,0.10);
+  border-radius: 999px;
+
+  box-shadow:
+    0 8px 0 rgba(58,47,42,0.06),
+    0 14px 30px var(--poto-shadow);
+  transform: translateY(-1px);
+}
+
+/* ふわっとキラキラ（疑似のシール感） */
+#timerDisplay::before{
+  content:"";
+  width: 10px;
+  height: 10px;
+  margin-right: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff, var(--poto-accent));
+  box-shadow:
+    18px 0 0 0 rgba(143,211,255,0.8),
+    36px 0 0 0 rgba(255,143,183,0.55);
+  opacity: 0.9;
+}
+
+/* 左の「学習時間 ○分」もサブ表示っぽく */
+#todayMinutes{
+  background: rgba(255,143,183,0.12);
+  border: 2px dashed rgba(255,143,183,0.35);
+  color: var(--poto-ink);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-family: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
+               "M PLUS Rounded 1c", system-ui, sans-serif;
+  font-weight: 800;
+}
+
+/* Start/Pause/Stopボタンを“ポップ”に */
+#daily .card:has(#timerDisplay) .btn.tiny{
+  border-radius: 999px;
+  font-weight: 900;
+  font-family: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN",
+               "M PLUS Rounded 1c", system-ui, sans-serif;
+  border: 2px solid rgba(58,47,42,0.10);
+  box-shadow: 0 6px 0 rgba(58,47,42,0.08);
+  transform: translateY(-1px);
+}
+
+#daily .card:has(#timerDisplay) .btn.tiny:active{
+  box-shadow: 0 2px 0 rgba(58,47,42,0.08);
+  transform: translateY(2px);
+}
+
+/* Startだけ目立たせる（既存クラスを壊さず“最初のStartボタン”を強調） */
+#daily .card:has(#timerDisplay) .row:nth-of-type(2) .btn.tiny:first-child{
+  background: linear-gradient(135deg, rgba(255,143,183,0.95), rgba(143,211,255,0.95));
+  color: #fff;
+  border-color: rgba(255,255,255,0.6);
+}
+
+/* 動いてる時に“ふわふわ”する（JSでクラスを付けられるならより良い） */
+.timer-running #timerDisplay{
+  animation: potoFloat 1.6s ease-in-out infinite;
+}
+
+@keyframes potoFloat{
+  0%,100%{ transform: translateY(-1px) rotate(-0.2deg); }
+  50%{ transform: translateY(-4px) rotate(0.2deg); }
+}
