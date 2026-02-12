@@ -1,1014 +1,1102 @@
-/* =========================================
-   Study Log Pro (app.js) FULL REPLACE
-   - Pro HTML 専用（Today/Week/Master/Calendar/History）
-   - Settings modal（保存/閉じる/×）確実に動作
-   - 手動タスク / 自動割当（マスター→試験日まで割当）
-   - 学習時間は手動入力のみ（分を加算/0にする）
-   - 復習（1,3,7,14日後）を自動表示（提案）
-   - 編集：タスクはタップで完了、長押し/メニューで編集
-   ========================================= */
+/* =========================
+   Study Log Pro (app.js) v4 置き換え版
+   - Pro HTML対応（Today/Week/Master/Calendar/History + Settings modal）
+   - データが消えない：互換マイグレーション + 自動スナップショット + 書き出し/復元(JSON)
+   - Master(推定分) → 試験日まで自動割当（週容量ベース）
+   - 今日：自動割当 と 手動追加 を別表示
+   - 復習：1/3/7/14日後を自動生成 + 「何回目」表示
+   - 学習時間：手動分のみ（minsInputで加算）
+   ========================= */
 
-(() => {
-  "use strict";
+const KEY = "study_pwa_v2"; // ここは固定（変えると別データになる）
+const TYPES = ["講義","演習","復習","模試","その他"];
 
-  // ===== Storage =====
-  const KEY = "study_pwa_v3_pro";
-  const TYPES = ["講義", "演習", "復習", "模試", "その他"];
+const DEFAULT_SETTINGS = {
+  examDate: null,                 // "YYYY-MM-DD"
+  weeklyCapMin: 900,              // 週の容量（分）
+  dayWeights: [1,1,1,1,1,0.7,0.5], // 月..日 配分
+  chunkMaxMin: 60,                // 1枠最大分
+  reviewOffsets: [1,3,7,14]        // 復習オフセット（日）
+};
 
-  const DEFAULT_SETTINGS = {
-    examDate: null,              // "YYYY-MM-DD"
-    weeklyCapMin: 900,           // 週の学習可能時間（分）
-    reviewOffsets: [1, 3, 7, 14], // 復習日
-    dayWeights: [1,1,1,1,1,0.7,0.5], // 月..日
-    dailyChunkMin: 60,           // 自動割当の1チャンク最大（分）
+// ===== Utils =====
+const iso = (d) => new Date(d).toISOString().slice(0,10);
+
+function addDays(isoDate, n){
+  const d = new Date(isoDate + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return iso(d);
+}
+function addMonths(d, n){
+  const x = new Date(d);
+  x.setDate(1);
+  x.setMonth(x.getMonth() + n);
+  return x;
+}
+function getMonday(d = new Date()){
+  const date = new Date(d);
+  const day = date.getDay() || 7;
+  if(day !== 1) date.setDate(date.getDate() - (day - 1));
+  date.setHours(12,0,0,0);
+  return iso(date);
+}
+function weekdayIndex(isoDate){
+  const d = new Date(isoDate + "T12:00:00");
+  const js = d.getDay(); // Sun0..Sat6
+  return (js + 6) % 7;   // Mon0..Sun6
+}
+function uid(prefix="id"){
+  return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
+}
+function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
+
+// ===== Store (load + migrate) =====
+const store = loadStore();
+
+function loadStore(){
+  let raw = null;
+  try{ raw = JSON.parse(localStorage.getItem(KEY)); }catch(e){ raw = null; }
+
+  // 最低形
+  const s = (raw && typeof raw === "object") ? raw : {};
+  s.settings ||= {};
+  s.settings = { ...DEFAULT_SETTINGS, ...s.settings };
+
+  // 旧v2互換（手動日次/週次）
+  s.daily ||= {};   // {"YYYY-MM-DD": [{text, done, type}]}
+  s.weekly ||= {};  // {"MONDAY_ISO": {tasks:[...]}}
+  // v3/v4
+  s.master ||= [];  // [{id,title,type,estMin,done,doneAt,createdAt,notes}]
+  s.plan   ||= {};  // {"YYYY-MM-DD": {auto:[{...}]}}
+  s.logs   ||= {};  // {"YYYY-MM-DD": {studyMin:number}}
+
+  // 旧: dailyTime -> logs へ
+  if(s.dailyTime && typeof s.dailyTime === "object"){
+    for(const [d, mins] of Object.entries(s.dailyTime)){
+      s.logs[d] ||= { studyMin: 0 };
+      s.logs[d].studyMin = (Number(s.logs[d].studyMin)||0) + (Number(mins)||0);
+    }
+    delete s.dailyTime;
+  }
+
+  // バージョン
+  s._v ||= 4;
+  return s;
+}
+
+// ===== Backup =====
+function autoSnapshot(){
+  // 12時間に一回、端末内にスナップショット保持
+  const last = Number(localStorage.getItem(KEY + "_lastSnapshot") || 0);
+  const now = Date.now();
+  if(now - last < 12*60*60*1000) return;
+  localStorage.setItem(KEY + "_snapshot", JSON.stringify(store));
+  localStorage.setItem(KEY + "_lastSnapshot", String(now));
+}
+
+function exportBackup(){
+  try{
+    const data = JSON.stringify(store, null, 2);
+    const blob = new Blob([data], { type:"application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `studylog_backup_${iso(new Date())}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    alert("バックアップを書き出しました（Files/Downloadsに保存されます）");
+  }catch(e){
+    alert("バックアップ失敗: " + e.message);
+  }
+}
+
+function importBackup(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const obj = JSON.parse(reader.result);
+      if(!obj || typeof obj !== "object") throw new Error("JSONが不正です");
+      // 保存してリロード（整形はloadStoreでやる）
+      localStorage.setItem(KEY, JSON.stringify(obj));
+      location.reload();
+    }catch(e){
+      alert("復元失敗: " + e.message);
+    }
   };
+  reader.readAsText(file);
+}
 
-  const store = loadStore();
-  function loadStore() {
-    let raw = null;
-    try { raw = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
-    const s = (raw && typeof raw === "object") ? raw : {};
-    s.settings = { ...DEFAULT_SETTINGS, ...(s.settings || {}) };
-    s.master ||= [];         // [{id,title,type,estMin,notes,done,doneAt,createdAt}]
-    s.plan ||= {};           // {"YYYY-MM-DD": {auto:[{id,masterId,title,type,estMin,done,origin,locked}]}}
-    s.manual ||= {};         // {"YYYY-MM-DD": [{id,text,type,done,createdAt}]}
-    s.logs ||= {};           // {"YYYY-MM-DD": {studyMin:number}}
-    s.weekNotes ||= {};      // optional future
-    return s;
-  }
-  function save(noRender=false){
-    localStorage.setItem(KEY, JSON.stringify(store));
-    if(!noRender) render();
-  }
+function restoreFromSnapshot(){
+  const snap = localStorage.getItem(KEY + "_snapshot");
+  if(!snap) return alert("スナップショットがありません");
+  if(!confirm("スナップショットから復元しますか？")) return;
+  localStorage.setItem(KEY, snap);
+  location.reload();
+}
 
-  // ===== Date utils =====
-  const iso = (d) => new Date(d).toISOString().slice(0,10);
-  const todayKey = iso(new Date());
-  let selectedDayKey = todayKey;
-  let selectedWeekKey = getMonday(new Date());
-  let calMonth = (()=>{ const d=new Date(); d.setDate(1); return d; })();
+window.exportBackup = exportBackup;
+window.importBackup = importBackup;
+window.restoreFromSnapshot = restoreFromSnapshot;
 
-  function getMonday(d=new Date()){
-    const date = new Date(d);
-    const day = date.getDay() || 7;
-    if(day !== 1) date.setDate(date.getDate() - (day - 1));
-    date.setHours(12,0,0,0);
-    return iso(date);
-  }
-  function addDays(isoDate, n){
-    const d = new Date(isoDate + "T12:00:00");
-    d.setDate(d.getDate() + n);
-    return iso(d);
-  }
-  function addMonths(d, n){
-    const x = new Date(d);
-    x.setDate(1);
-    x.setMonth(x.getMonth() + n);
-    return x;
-  }
-  function weekdayIndex(isoDate){
-    const d = new Date(isoDate + "T12:00:00");
-    const js = d.getDay(); // 0 Sun..6 Sat
-    return (js + 6) % 7;   // 0 Mon..6 Sun
-  }
-  function weekRangeLabel(mondayIso){
-    const sunIso = addDays(mondayIso, 6);
-    return `${mondayIso} 〜 ${sunIso}`;
-  }
-  function daysOfWeek(mondayIso){
-    return Array.from({length:7}, (_,i)=>addDays(mondayIso, i));
-  }
+// ===== Save =====
+function save(){
+  autoSnapshot();
+  localStorage.setItem(KEY, JSON.stringify(store));
+  render();
+}
 
-  // ===== Helpers =====
-  function uid(prefix="id"){
-    return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
+// ===== State =====
+const todayKey = iso(new Date());
+let selectedDayKey = todayKey;
+let selectedWeekKey = getMonday();
+let calMonth = new Date(); calMonth.setDate(1);
+
+// ===== Tabs / Views (Pro HTML) =====
+function setActiveTab(view){
+  const map = {
+    daily: "tabDaily",
+    weekly: "tabWeekly",
+    master: "tabMaster",
+    calendar: "tabCalendar",
+    history: "tabHistory",
+  };
+  for(const [k,id] of Object.entries(map)){
+    const b = document.getElementById(id);
+    if(!b) continue;
+    b.classList.toggle("active", k === view);
   }
-  function clampInt(v, min=0, max=Number.MAX_SAFE_INTEGER){
-    const n = parseInt(v, 10);
-    if(!Number.isFinite(n)) return min;
-    return Math.max(min, Math.min(max, n));
+}
+function show(view){
+  const views = ["daily","weekly","master","calendar","history"];
+  for(const v of views){
+    const el = document.getElementById(v);
+    if(el) el.hidden = (v !== view);
   }
-  function rateOf(list){
-    if(!list || list.length===0) return null;
-    const done = list.filter(t=>t.done).length;
-    return Math.round(done / list.length * 100);
-  }
-  function heatClass(rate){
-    if(rate === null) return "r0";
-    if(rate === 0) return "r0";
-    if(rate < 50) return "r1";
-    if(rate < 80) return "r2";
-    return "r3";
-  }
+  setActiveTab(view);
+  render();
+}
+window.show = show;
 
-  function getAuto(day){ return (store.plan?.[day]?.auto) ? store.plan[day].auto : []; }
-  function getManual(day){ return store.manual?.[day] ? store.manual[day] : []; }
-  function getAllDay(day){ return [...getAuto(day), ...getManual(day)]; }
+// ===== Navigation =====
+function shiftDay(delta){ selectedDayKey = addDays(selectedDayKey, delta); render(); }
+function goToday(){ selectedDayKey = todayKey; render(); }
+function shiftWeek(delta){
+  selectedWeekKey = addDays(selectedWeekKey, delta*7);
+  store.weekly[selectedWeekKey] ||= { tasks: [] };
+  render();
+}
+function goThisWeek(){ selectedWeekKey = getMonday(); store.weekly[selectedWeekKey] ||= { tasks: [] }; render(); }
+function shiftMonth(delta){ calMonth = addMonths(calMonth, delta); render(); }
+function goThisMonth(){ calMonth = new Date(); calMonth.setDate(1); render(); }
 
-  function getStudyMin(day){
-    return (store.logs?.[day]?.studyMin) ? (Number(store.logs[day].studyMin)||0) : 0;
-  }
-  function addStudyMin(day, mins){
-    store.logs ||= {};
-    store.logs[day] ||= { studyMin: 0 };
-    store.logs[day].studyMin = Math.max(0, (store.logs[day].studyMin||0) + mins);
-  }
-  function setStudyMin(day, mins){
-    store.logs ||= {};
-    store.logs[day] ||= { studyMin: 0 };
-    store.logs[day].studyMin = Math.max(0, mins|0);
-  }
+window.shiftDay = shiftDay;
+window.goToday = goToday;
+window.shiftWeek = shiftWeek;
+window.goThisWeek = goThisWeek;
+window.shiftMonth = shiftMonth;
+window.goThisMonth = goThisMonth;
 
-  // ===== View switch =====
-  const VIEW_IDS = ["daily","weekly","master","calendar","history"];
-  function setActiveTab(view){
-    const map = { daily:"Daily", weekly:"Weekly", master:"Master", calendar:"Calendar", history:"History" };
-    Object.entries(map).forEach(([k, suf])=>{
-      const b = document.getElementById("tab"+suf);
-      if(b) b.classList.toggle("active", k === view);
-    });
-  }
-  function show(view){
-    VIEW_IDS.forEach(id=>{
-      const el = document.getElementById(id);
-      if(el) el.hidden = (id !== view);
-    });
-    setActiveTab(view);
-    render();
-  }
+// ===== Time logs (manual only) =====
+function getStudyMin(dayIso){
+  return Number(store.logs?.[dayIso]?.studyMin || 0) || 0;
+}
+function addMinutes(){
+  const inp = document.getElementById("minsInput");
+  const v = parseInt(inp?.value || "0", 10) || 0;
+  if(inp) inp.value = "";
+  if(v <= 0) return;
+  store.logs[selectedDayKey] ||= { studyMin: 0 };
+  store.logs[selectedDayKey].studyMin = getStudyMin(selectedDayKey) + v;
+  save();
+}
+function resetDayMinutes(){
+  if(!confirm("この日の学習時間を0分にしますか？")) return;
+  store.logs[selectedDayKey] ||= { studyMin: 0 };
+  store.logs[selectedDayKey].studyMin = 0;
+  save();
+}
+window.addMinutes = addMinutes;
+window.resetDayMinutes = resetDayMinutes;
 
-  // ===== Settings modal (Pro HTML id fixed) =====
-  function openSettings(){
-    const m = document.getElementById("settingsModal");
-    if(!m) return;
+// ===== Manual tasks (Daily manual) =====
+function addManualTask(){
+  const text = prompt("手動タスク内容");
+  if(!text) return;
+  const type = pickType("演習");
+  store.daily[selectedDayKey] ||= [];
+  store.daily[selectedDayKey].push({ text, done:false, type });
+  save();
+}
+window.addManualTask = addManualTask;
 
-    // hidden解除 + display保険（CSSがdisplay:noneにしてても復活）
-    m.hidden = false;
-    m.style.display = "flex";
-    m.style.pointerEvents = "auto";
+function toggleManual(dayIso, idx){
+  const list = store.daily[dayIso] || [];
+  if(!list[idx]) return;
+  list[idx].done = !list[idx].done;
+  save();
+}
+function deleteManual(dayIso, idx){
+  if(!confirm("削除しますか？")) return;
+  const list = store.daily[dayIso] || [];
+  list.splice(idx,1);
+  store.daily[dayIso] = list;
+  save();
+}
 
-    // 値反映
-    const examEl = document.getElementById("examDateInput");
-    const capEl  = document.getElementById("weeklyCapInput");
-    const offEl  = document.getElementById("reviewOffsetsInput");
+// ===== Master =====
+function pickType(defaultType="演習"){
+  const msg =
+    "タイプを選んで番号を入力:\n" +
+    TYPES.map((t,i)=>`${i+1}) ${t}`).join("\n") +
+    `\n\n(空欄なら ${defaultType})`;
+  const raw = prompt(msg, "");
+  const n = parseInt(raw,10);
+  if(!raw) return defaultType;
+  if(Number.isFinite(n) && n>=1 && n<=TYPES.length) return TYPES[n-1];
+  if(TYPES.includes(raw)) return raw;
+  return defaultType;
+}
 
-    if(examEl) examEl.value = store.settings.examDate || "";
-    if(capEl) capEl.value = String(store.settings.weeklyCapMin ?? 0);
-    if(offEl) offEl.value = (store.settings.reviewOffsets || DEFAULT_SETTINGS.reviewOffsets).join(",");
+function addMasterTask(){
+  const title = prompt("Masterタスク名（例: FAR Ch3 講義）");
+  if(!title) return;
+  const type = pickType("講義");
 
-    if(examEl) setTimeout(()=>examEl.focus(), 0);
-  }
-  function closeSettings(){
-    const m = document.getElementById("settingsModal");
-    if(!m) return;
-    m.hidden = true;
-    m.style.display = "none";
-  }
-  function parseOffsetsInput(v){
-    if(!v) return DEFAULT_SETTINGS.reviewOffsets.slice();
-    const arr = String(v).split(/[,\s]+/)
-      .map(x=>parseInt(x,10))
-      .filter(n=>Number.isFinite(n) && n>0);
-    return arr.length ? arr.slice(0, 20) : DEFAULT_SETTINGS.reviewOffsets.slice();
-  }
-  function saveSettings(){
-    const examEl = document.getElementById("examDateInput");
-    const capEl  = document.getElementById("weeklyCapInput");
-    const offEl  = document.getElementById("reviewOffsetsInput");
+  const est = prompt("推定時間（分）例: 120", "120");
+  if(est === null) return;
+  const estMin = Math.max(1, parseInt(est,10) || 0);
+  const notes = prompt("メモ（任意）","") || "";
 
-    const exam = (examEl?.value || "").trim();
-    const capMin = clampInt(capEl?.value || "0", 0, 200000);
-    const offsets = parseOffsetsInput(offEl?.value || "");
+  store.master.push({
+    id: uid("m"),
+    title, type, estMin, notes,
+    createdAt: iso(new Date()),
+    done: false,
+    doneAt: null
+  });
+  save();
+}
+window.addMasterTask = addMasterTask;
 
-    if(exam) store.settings.examDate = exam; // YYYY-MM-DD (type=date)
-    store.settings.weeklyCapMin = capMin;
-    store.settings.reviewOffsets = offsets;
-
-    save();
-    closeSettings();
-  }
-
-  // ===== Manual tasks =====
-  function pickType(defaultType="演習"){
-    const msg =
-      "タイプ番号を入力:\n" +
-      TYPES.map((t,i)=>`${i+1}) ${t}`).join("\n") +
-      `\n\n空欄なら ${defaultType}`;
-    const raw = prompt(msg, "");
-    if(raw === null) return null;
-    if(raw.trim()==="") return defaultType;
-    const n = parseInt(raw,10);
-    if(Number.isFinite(n) && n>=1 && n<=TYPES.length) return TYPES[n-1];
-    if(TYPES.includes(raw.trim())) return raw.trim();
-    return defaultType;
-  }
-
-  // Pro HTML: Today の「＋追加」用
-  function addManualTask(){
-    const text = prompt("タスク内容");
-    if(!text) return;
-    const type = pickType("演習");
-    if(type===null) return;
-
-    store.manual[selectedDayKey] ||= [];
-    store.manual[selectedDayKey].push({
-      id: uid("man"),
-      text,
-      type,
-      done:false,
-      createdAt: iso(new Date())
-    });
-    save();
-  }
-
-  function toggleManual(day, id){
-    const list = store.manual?.[day] || [];
-    const t = list.find(x=>x.id===id);
-    if(!t) return;
-    t.done = !t.done;
-    save();
-  }
-  function editManual(day, id){
-    const list = store.manual?.[day] || [];
-    const t = list.find(x=>x.id===id);
-    if(!t) return;
-
-    const v = prompt("タスク内容を編集", t.text);
-    if(v===null) return;
-    const nt = v.trim();
-    if(!nt) return;
-
-    t.text = nt;
-    save();
-  }
-  function deleteManual(day, id){
-    if(!confirm("このタスクを削除しますか？")) return;
-    const list = store.manual?.[day] || [];
-    const idx = list.findIndex(x=>x.id===id);
-    if(idx<0) return;
-    list.splice(idx,1);
-    store.manual[day] = list;
-    save();
-  }
-
-  // ===== Master tasks =====
-  function addMasterTask(){
-    const title = prompt("マスタータスク名（例：FAR Unit 3 講義）");
-    if(!title) return;
-    const type = pickType("講義");
-    if(type===null) return;
-
-    const est = prompt("推定時間（分）例：120", "120");
-    if(est===null) return;
-    const estMin = Math.max(1, clampInt(est, 1, 200000));
-
-    const notes = prompt("メモ（任意）", "") || "";
-
+// FAR bulk seed
+function seedFARChapters(){
+  // 既にあるなら重複防止したい場合はここでチェック可能
+  for(let i=1;i<=23;i++){
     store.master.push({
       id: uid("m"),
-      title: title.trim(),
-      type,
-      estMin,
-      notes,
+      title: `FAR Ch${i}`,
+      type: "講義",
+      estMin: 120, // デフォ2時間
+      notes: "",
+      createdAt: iso(new Date()),
       done: false,
-      doneAt: null,
-      createdAt: iso(new Date())
+      doneAt: null
     });
-    save();
   }
-
-  function toggleMaster(id){
-    const m = store.master.find(x=>x.id===id);
-    if(!m) return;
-    m.done = !m.done;
-    m.doneAt = m.done ? iso(new Date()) : null;
-    save();
+  save();
+  alert("FAR Ch1〜23 を追加しました");
+}
+function seedFARWithMinutes(){
+  const raw = prompt("Ch1〜23の推定分を23個（カンマ区切り）\n例: 120,120,90,...", "");
+  if(!raw) return;
+  const arr = raw.split(",").map(x=>parseInt(x.trim(),10)).filter(n=>Number.isFinite(n));
+  if(arr.length !== 23){
+    alert("23個にしてください（今: " + arr.length + "）");
+    return;
   }
-
-  function editMaster(id){
-    const m = store.master.find(x=>x.id===id);
-    if(!m) return;
-
-    const op = prompt(
-`編集：
-1) タイトル
-2) タイプ
-3) 推定時間（分）
-4) メモ
-5) 削除`,
-      "1"
-    );
-    if(op===null) return;
-    const n = parseInt(op,10);
-    if(!Number.isFinite(n)) return;
-
-    if(n===1){
-      const v = prompt("タイトル", m.title);
-      if(v===null) return;
-      if(v.trim()) m.title = v.trim();
-    }
-    if(n===2){
-      const t = pickType(m.type || "講義");
-      if(t===null) return;
-      m.type = t;
-    }
-    if(n===3){
-      const v = prompt("推定時間（分）", String(m.estMin));
-      if(v===null) return;
-      m.estMin = Math.max(1, clampInt(v, 1, 200000));
-    }
-    if(n===4){
-      const v = prompt("メモ", m.notes || "");
-      if(v===null) return;
-      m.notes = v;
-    }
-    if(n===5){
-      if(confirm("このマスタータスクを削除しますか？")){
-        store.master = store.master.filter(x=>x.id!==id);
-      }
-    }
-    save();
-  }
-
-  // ===== Auto plan generation =====
-  function collectLockedAuto(){
-    const locked = {};
-    Object.entries(store.plan || {}).forEach(([d,p])=>{
-      const arr = (p.auto||[]).filter(t=>t.locked);
-      if(arr.length) locked[d] = arr.map(x=>({...x}));
+  for(let i=1;i<=23;i++){
+    store.master.push({
+      id: uid("m"),
+      title: `FAR Ch${i}`,
+      type: "講義",
+      estMin: arr[i-1],
+      notes: "",
+      createdAt: iso(new Date()),
+      done: false,
+      doneAt: null
     });
-    return locked;
   }
+  save();
+  alert("FAR Ch1〜23（分数つき）を追加しました");
+}
+window.seedFARChapters = seedFARChapters;
+window.seedFARWithMinutes = seedFARWithMinutes;
 
-  function buildDailyCapacityMap(startIso, endIso){
-    const cap = {};
-    const totalMinPerWeek = Math.max(0, Number(store.settings.weeklyCapMin||0));
-    const w = (Array.isArray(store.settings.dayWeights) && store.settings.dayWeights.length===7)
-      ? store.settings.dayWeights
-      : DEFAULT_SETTINGS.dayWeights;
-
-    const sumW = w.reduce((a,b)=>a+(Number(b)||0),0) || 1;
-    let d = startIso;
-    while(d <= endIso){
-      const wi = weekdayIndex(d);
-      const frac = (Number(w[wi])||0) / sumW;
-      cap[d] = Math.round(totalMinPerWeek * frac);
-      d = addDays(d, 1);
-    }
-    return cap;
-  }
-
-  function rebuildAuto(){
-    const exam = store.settings.examDate;
-    if(!exam){
-      alert("Settingsで試験日を設定してください。");
-      openSettings();
-      return;
-    }
-
-    const start = todayKey;
-    const end = exam;
-
-    // lockedだけ残して再生成
-    const locked = collectLockedAuto();
-    store.plan = {};
-    Object.entries(locked).forEach(([d,arr])=>{
-      store.plan[d] ||= { auto: [] };
-      store.plan[d].auto = arr;
+// Demo/utility buttons (Weekの操作欄用)
+function seedDemo(){
+  if(!confirm("USCPAテンプレを追加しますか？（既存は残ります）")) return;
+  // FAR Ch1-5だけ軽く入れる例
+  for(let i=1;i<=5;i++){
+    store.master.push({
+      id: uid("m"),
+      title: `FAR Ch${i}`,
+      type: "講義",
+      estMin: 120,
+      notes: "demo",
+      createdAt: iso(new Date()),
+      done: false,
+      doneAt: null
     });
+  }
+  save();
+  alert("テンプレを投入しました（例）");
+}
+function wipeAll(){
+  if(!confirm("全データ削除しますか？（バックアップ推奨）")) return;
+  localStorage.removeItem(KEY);
+  location.reload();
+}
+window.seedDemo = seedDemo;
+window.wipeAll = wipeAll;
 
-    // daily capacity
-    const cap = buildDailyCapacityMap(start, end);
-    // locked分を差し引き
-    for(const d of Object.keys(cap)){
-      const used = (store.plan[d]?.auto||[]).reduce((a,t)=>a+(t.estMin||0),0);
-      cap[d] = Math.max(0, cap[d]-used);
-    }
+// ===== Auto plan =====
+function rebuildAuto(){
+  generateAutoPlan();
+}
+window.rebuildAuto = rebuildAuto;
 
-    // 未完了masterを順に詰める
-    const masters = (store.master||[]).filter(m=>!m.done);
+function buildDailyCapacityMap(startIso, endIso){
+  const cap = {};
+  const weeklyCapMin = Math.max(0, Number(store.settings.weeklyCapMin || 0) || 0);
+  const w = Array.isArray(store.settings.dayWeights) && store.settings.dayWeights.length===7
+    ? store.settings.dayWeights : DEFAULT_SETTINGS.dayWeights;
+  const sumW = w.reduce((a,b)=>a+(Number(b)||0),0) || 1;
 
-    for(const m of masters){
-      let remaining = m.estMin;
+  let d = startIso;
+  while(d <= endIso){
+    const wi = weekdayIndex(d);
+    const frac = (Number(w[wi])||0)/sumW;
+    cap[d] = Math.round(weeklyCapMin * frac);
+    d = addDays(d,1);
+  }
+  return cap;
+}
 
-      let d = start;
-      while(remaining > 0 && d <= end){
+function collectLockedAuto(){
+  const out = {};
+  for(const [d,p] of Object.entries(store.plan || {})){
+    const locked = (p.auto||[]).filter(t=>t.locked);
+    if(locked.length) out[d] = locked.map(x=>({...x}));
+  }
+  return out;
+}
+
+function generateAutoPlan(){
+  const exam = store.settings.examDate;
+  if(!exam){
+    alert("まず Settings で試験日を設定してください");
+    openSettings();
+    return;
+  }
+
+  const start = todayKey;
+  const end = exam;
+  if(end < start){
+    alert("試験日が過去になっています");
+    return;
+  }
+
+  // lockedを残して作り直し
+  const locked = collectLockedAuto();
+  store.plan = {};
+  for(const [d,arr] of Object.entries(locked)){
+    store.plan[d] ||= { auto: [] };
+    store.plan[d].auto = [...arr];
+  }
+
+  const cap = buildDailyCapacityMap(start, end);
+  // locked分を差し引く
+  for(const d of Object.keys(cap)){
+    const used = (store.plan[d]?.auto||[]).reduce((a,t)=>a+(t.estMin||0),0);
+    cap[d] = Math.max(0, cap[d]-used);
+  }
+
+  const chunkMax = Math.max(10, Number(store.settings.chunkMaxMin || 60) || 60);
+  const masters = (store.master||[]).filter(m=>!m.done);
+
+  // Master -> 近い日から詰める
+  for(const m of masters){
+    let remaining = Math.max(0, Number(m.estMin||0) || 0);
+    let d = start;
+    while(remaining > 0 && d <= end){
+      const c = cap[d] || 0;
+      if(c > 0){
+        const chunk = Math.min(c, remaining, chunkMax);
         store.plan[d] ||= { auto: [] };
-        store.plan[d].auto ||= [];
-
-        const c = cap[d] || 0;
-        if(c > 0){
-          const chunk = Math.min(c, remaining, store.settings.dailyChunkMin || DEFAULT_SETTINGS.dailyChunkMin);
-          store.plan[d].auto.push({
-            id: uid("auto"),
-            masterId: m.id,
-            title: m.title + (remaining > chunk ? "（続き）" : ""),
-            type: m.type || "その他",
-            estMin: chunk,
-            done: false,
-            origin: "master",
-            locked: false
-          });
-          remaining -= chunk;
-          cap[d] -= chunk;
-        }
-        d = addDays(d, 1);
-      }
-
-      if(remaining > 0){
-        alert(`割当が足りません：\n"${m.title}" が残り ${remaining} 分\n週の容量を増やすか、試験日を延ばしてください。`);
-        break;
-      }
-    }
-
-    // 復習（提案としてplanに追加）
-    const offsets = store.settings.reviewOffsets || DEFAULT_SETTINGS.reviewOffsets;
-    const firstDateByMaster = {};
-
-    Object.keys(store.plan).sort().forEach(d=>{
-      (store.plan[d].auto||[]).forEach(t=>{
-        if(t.masterId && t.origin==="master" && !firstDateByMaster[t.masterId]){
-          firstDateByMaster[t.masterId] = d;
-        }
-      });
-    });
-
-    Object.entries(firstDateByMaster).forEach(([mid, firstDay])=>{
-      const m = store.master.find(x=>x.id===mid);
-      if(!m) return;
-      if(m.type !== "講義" && m.type !== "演習") return;
-
-      offsets.forEach((k, idx)=>{
-        const rd = addDays(firstDay, k);
-        if(rd < start || rd > end) return;
-        store.plan[rd] ||= { auto: [] };
-        const name = `復習: ${m.title}（${k}日後）`;
-        const exists = (store.plan[rd].auto||[]).some(x=>x.origin==="review" && x.masterId===mid && x.title===name);
-        if(exists) return;
-
-        store.plan[rd].auto.push({
+        store.plan[d].auto.push({
           id: uid("auto"),
-          masterId: mid,
-          title: name,
-          type: "復習",
-          estMin: 20 + idx*5,
+          masterId: m.id,
+          title: m.title + (remaining > chunk ? "（続き）" : ""),
+          type: m.type || "その他",
+          estMin: chunk,
           done: false,
-          origin: "review",
+          origin: "master",
           locked: false
         });
-      });
-    });
-
-    save();
-  }
-
-  function toggleAuto(day, id){
-    const list = store.plan?.[day]?.auto || [];
-    const t = list.find(x=>x.id===id);
-    if(!t) return;
-    t.done = !t.done;
-    save();
-  }
-
-  function autoMenu(day, id){
-    const list = store.plan?.[day]?.auto || [];
-    const idx = list.findIndex(x=>x.id===id);
-    if(idx<0) return;
-    const t = list[idx];
-
-    const raw = prompt(
-`自動タスク操作：
-1) 日付移動（YYYY-MM-DD）
-2) 推定時間変更（分）
-3) 分割（例: 30 + 30）
-4) 削除
-5) 手動へ移す（同日手動）
-
-番号を入力`,
-      "2"
-    );
-    if(raw===null) return;
-    const n = parseInt(raw,10);
-    if(!Number.isFinite(n)) return;
-
-    if(n===1){
-      const to = prompt("移動先（YYYY-MM-DD）", day);
-      if(!to) return;
-      store.plan[to] ||= { auto: [] };
-      store.plan[to].auto ||= [];
-      store.plan[to].auto.push(t);
-      list.splice(idx,1);
-      save();
-      return;
-    }
-    if(n===2){
-      const v = prompt("推定時間（分）", String(t.estMin||0));
-      if(v===null) return;
-      t.estMin = Math.max(1, clampInt(v, 1, 200000));
-      save();
-      return;
-    }
-    if(n===3){
-      const a = clampInt(prompt("分割後1つ目（分）","30") ?? "0", 1, 200000);
-      const b = clampInt(prompt("分割後2つ目（分）","30") ?? "0", 1, 200000);
-      const first = {...t, id: uid("auto"), estMin: a, done:false};
-      const second= {...t, id: uid("auto"), estMin: b, done:false};
-      list.splice(idx,1, first, second);
-      save();
-      return;
-    }
-    if(n===4){
-      if(!confirm("削除しますか？")) return;
-      list.splice(idx,1);
-      save();
-      return;
-    }
-    if(n===5){
-      store.manual[day] ||= [];
-      store.manual[day].push({ id: uid("man"), text: t.title, type: t.type||"その他", done:t.done, createdAt: iso(new Date()) });
-      list.splice(idx,1);
-      save();
-      return;
-    }
-  }
-
-  // ===== UI renderers =====
-  function el(id){ return document.getElementById(id); }
-  function clear(node){ if(node) node.innerHTML = ""; }
-
-  function renderDaily(){
-    el("dailyDate").textContent = selectedDayKey;
-
-    // meta
-    const all = getAllDay(selectedDayKey);
-    const r = rateOf(all);
-    el("dailyMeta").textContent = [
-      r===null ? "—" : `達成率 ${r}%`,
-      `学習時間 ${getStudyMin(selectedDayKey)}分`,
-      store.settings.examDate ? `試験日 ${store.settings.examDate}` : "試験日 未設定"
-    ].join(" / ");
-
-    // countdown pill
-    const cd = el("examCountdown");
-    if(cd){
-      if(!store.settings.examDate){
-        cd.textContent = "Exam: —";
-      } else {
-        const days = Math.ceil((new Date(store.settings.examDate+"T00:00:00") - new Date(todayKey+"T00:00:00")) / 86400000);
-        cd.textContent = days>=0 ? `Exam in ${days}d` : `Exam passed`;
+        remaining -= chunk;
+        cap[d] -= chunk;
       }
+      d = addDays(d,1);
     }
-
-    // auto list
-    const auto = getAuto(selectedDayKey);
-    const autoUl = el("dailyAutoList");
-    clear(autoUl);
-    if(auto.length===0){
-      const li = document.createElement("li");
-      li.className = "empty";
-      li.textContent = "まだ割当がありません。Masterにタスクを入れて「再計算」してください。";
-      autoUl.appendChild(li);
-    } else {
-      auto.forEach(t=>{
-        const li = document.createElement("li");
-        li.className = "rowItem";
-        li.innerHTML = `
-          <div class="left ${t.done ? "done":""}">
-            <div class="title">【${t.type}】 ${escapeHtml(t.title)}</div>
-            <div class="sub muted">${t.origin === "review" ? "復習" : "自動"} / ${t.estMin||0}分</div>
-          </div>
-          <div class="right">
-            <button class="miniBtn" data-act="edit">✎</button>
-          </div>
-        `;
-        li.addEventListener("click", (e)=>{
-          const btn = e.target.closest("button");
-          if(btn){
-            if(btn.dataset.act==="edit") autoMenu(selectedDayKey, t.id);
-            return;
-          }
-          toggleAuto(selectedDayKey, t.id);
-        });
-        autoUl.appendChild(li);
-      });
+    if(remaining > 0){
+      alert(`割当不足: "${m.title}" が残り ${remaining}分\n週の容量を増やすか、試験日を後ろにしてください。`);
+      break;
     }
-
-    // manual list
-    const manual = getManual(selectedDayKey);
-    const manUl = el("dailyManualList");
-    clear(manUl);
-    if(manual.length===0){
-      const li = document.createElement("li");
-      li.className = "empty";
-      li.textContent = "手動タスクはまだありません。";
-      manUl.appendChild(li);
-    } else {
-      manual.forEach(t=>{
-        const li = document.createElement("li");
-        li.className = "rowItem";
-        li.innerHTML = `
-          <div class="left ${t.done ? "done":""}">
-            <div class="title">【${t.type}】 ${escapeHtml(t.text)}</div>
-            <div class="sub muted">手動</div>
-          </div>
-          <div class="right">
-            <button class="miniBtn" data-act="edit">✎</button>
-            <button class="miniBtn danger" data-act="del">🗑</button>
-          </div>
-        `;
-        li.addEventListener("click", (e)=>{
-          const btn = e.target.closest("button");
-          if(btn){
-            if(btn.dataset.act==="edit") editManual(selectedDayKey, t.id);
-            if(btn.dataset.act==="del") deleteManual(selectedDayKey, t.id);
-            return;
-          }
-          toggleManual(selectedDayKey, t.id);
-        });
-        manUl.appendChild(li);
-      });
-    }
-
-    // minutes pill
-    const minsPill = el("todayMinutes");
-    if(minsPill) minsPill.textContent = `学習時間 ${getStudyMin(selectedDayKey)}分`;
-
-    // review list (today)
-    const reviewUl = el("todayReviewList");
-    const offsets = store.settings.reviewOffsets || DEFAULT_SETTINGS.reviewOffsets;
-    const reviews = getAuto(selectedDayKey).filter(t=>t.origin==="review");
-    clear(reviewUl);
-    if(reviews.length===0){
-      const li = document.createElement("li");
-      li.className = "empty";
-      li.textContent = "—";
-      reviewUl.appendChild(li);
-    } else {
-      reviews.forEach(t=>{
-        const li = document.createElement("li");
-        li.className = "rowItem compact";
-        li.innerHTML = `
-          <div class="left ${t.done ? "done":""}">
-            <div class="title">🧠 ${escapeHtml(t.title)}</div>
-            <div class="sub muted">${t.estMin||0}分</div>
-          </div>
-        `;
-        li.addEventListener("click", ()=>toggleAuto(selectedDayKey, t.id));
-        reviewUl.appendChild(li);
-      });
-    }
-    const hint = el("reviewHint");
-    if(hint) hint.textContent = `Offsets: ${offsets.join(",")}`;
-
-    // wire Today minutes buttons (HTML onclick also exists, but保険)
-    // (nothing here)
   }
 
-  function renderWeekly(){
-    el("weekLabel").textContent = `週: ${weekRangeLabel(selectedWeekKey)}`;
-
-    const days = daysOfWeek(selectedWeekKey);
-    const totalAssigned = days.reduce((a,d)=>a + getAuto(d).reduce((x,t)=>x+(t.estMin||0),0), 0);
-    const cap = Number(store.settings.weeklyCapMin||0);
-    el("weeklyCap").textContent = `${cap} min`;
-    el("weeklyAssigned").textContent = `${totalAssigned} min`;
-    el("weeklyRemain").textContent = `${Math.max(0, cap-totalAssigned)} min`;
-
-    const board = el("weeklyAutoBoard");
-    clear(board);
-
-    days.forEach(d=>{
-      const col = document.createElement("div");
-      col.className = "boardCol";
-      const list = getAuto(d);
-      const done = list.filter(x=>x.done).length;
-
-      col.innerHTML = `
-        <div class="boardHead">
-          <div class="bTitle">${d}</div>
-          <div class="bSub muted">${done}/${list.length}</div>
-        </div>
-        <div class="boardBody"></div>
-      `;
-      const body = col.querySelector(".boardBody");
-      if(list.length===0){
-        const p = document.createElement("div");
-        p.className = "empty";
-        p.textContent = "—";
-        body.appendChild(p);
-      } else {
-        list.forEach(t=>{
-          const card = document.createElement("div");
-          card.className = "taskCard";
-          card.innerHTML = `
-            <div class="${t.done ? "done":""}">【${t.type}】 ${escapeHtml(t.title)}</div>
-            <div class="muted">${t.estMin||0}分</div>
-          `;
-          card.addEventListener("click", (e)=>{
-            if(e.altKey) autoMenu(d, t.id); // PC用裏技
-            else toggleAuto(d, t.id);
-          });
-          card.addEventListener("contextmenu", (e)=>{ e.preventDefault(); autoMenu(d, t.id); });
-          body.appendChild(card);
-        });
+  // Review generation (with nth count)
+  const offsets = (store.settings.reviewOffsets||DEFAULT_SETTINGS.reviewOffsets).filter(n=>n>0);
+  const firstDateByMaster = {};
+  Object.keys(store.plan).sort().forEach(d=>{
+    (store.plan[d].auto||[]).forEach(t=>{
+      if(t.origin==="master" && t.masterId && !firstDateByMaster[t.masterId]){
+        firstDateByMaster[t.masterId] = d;
       }
-      board.appendChild(col);
     });
-  }
-
-  function renderMaster(){
-    const ul = el("masterList");
-    clear(ul);
-
-    const q = (el("masterSearch")?.value || "").trim().toLowerCase();
-    const filter = el("masterFilter")?.value || "all";
-
-    let list = store.master.slice();
-    if(q){
-      list = list.filter(m =>
-        (m.title||"").toLowerCase().includes(q) ||
-        (m.type||"").toLowerCase().includes(q) ||
-        (m.notes||"").toLowerCase().includes(q)
-      );
-    }
-    if(filter==="open") list = list.filter(m=>!m.done);
-    if(filter==="done") list = list.filter(m=>m.done);
-
-    if(list.length===0){
-      const li = document.createElement("li");
-      li.className = "empty";
-      li.textContent = "マスタータスクがありません。＋追加で作ってください。";
-      ul.appendChild(li);
-      return;
-    }
-
-    list.forEach(m=>{
-      const li = document.createElement("li");
-      li.className = "rowItem";
-      li.innerHTML = `
-        <div class="left ${m.done ? "done":""}">
-          <div class="title">【${m.type}】 ${escapeHtml(m.title)}</div>
-          <div class="sub muted">${m.estMin}分 ${m.notes ? " / " + escapeHtml(m.notes) : ""}</div>
-        </div>
-        <div class="right">
-          <button class="miniBtn" data-act="toggle">${m.done ? "↩︎" : "✓"}</button>
-          <button class="miniBtn" data-act="edit">✎</button>
-        </div>
-      `;
-      li.addEventListener("click", (e)=>{
-        const btn = e.target.closest("button");
-        if(!btn) return;
-        if(btn.dataset.act==="toggle") toggleMaster(m.id);
-        if(btn.dataset.act==="edit") editMaster(m.id);
-      });
-      ul.appendChild(li);
-    });
-  }
-
-  function renderCalendar(){
-    const grid = el("calendarGrid");
-    if(!grid) return;
-
-    const y = calMonth.getFullYear();
-    const m = calMonth.getMonth();
-    el("calMonthLabel").textContent = `${y}年 ${m+1}月`;
-
-    grid.innerHTML = "";
-    const WEEKDAYS = ["月","火","水","木","金","土","日"];
-    WEEKDAYS.forEach(w=>{
-      const h = document.createElement("div");
-      h.className = "calHead";
-      h.textContent = w;
-      grid.appendChild(h);
-    });
-
-    const first = new Date(y, m, 1);
-    const firstIso = iso(first);
-    const jsDay = first.getDay();
-    const idx = (jsDay + 6) % 7;
-    const startIso = addDays(firstIso, -idx);
-
-    for(let i=0;i<42;i++){
-      const dayIso = addDays(startIso, i);
-      const d = new Date(dayIso + "T12:00:00");
-      const inMonth = d.getMonth() === m;
-
-      const list = getAllDay(dayIso);
-      const r = rateOf(list);
-
-      const cell = document.createElement("div");
-      cell.className = `calCell ${heatClass(r)} ${inMonth ? "" : "outMonth"} ${dayIso===todayKey ? "todayRing":""}`;
-      cell.innerHTML = `
-        <div class="calTop">
-          <span class="calDay">${d.getDate()}</span>
-          <span class="calRate">${r===null ? "" : r+"%"}</span>
-        </div>
-        <div class="calRate">${list.length ? `${list.filter(t=>t.done).length}/${list.length}` : ""}</div>
-      `;
-      cell.addEventListener("click", ()=>{
-        selectedDayKey = dayIso;
-        show("daily");
-      });
-      grid.appendChild(cell);
-    }
-  }
-
-  function renderHistory(){
-    const weeksUl = el("historyWeeks");
-    const daysUl  = el("historyDays");
-    if(weeksUl){
-      clear(weeksUl);
-      // week keys = mondays between oldest and now (based on plan/manual)
-      const keys = new Set();
-      Object.keys(store.plan||{}).forEach(d=>keys.add(getMonday(new Date(d+"T12:00:00"))));
-      Object.keys(store.manual||{}).forEach(d=>keys.add(getMonday(new Date(d+"T12:00:00"))));
-      const list = [...keys].sort().reverse().slice(0, 20);
-
-      if(list.length===0){
-        const li=document.createElement("li"); li.className="empty"; li.textContent="まだデータがありません。";
-        weeksUl.appendChild(li);
-      } else {
-        list.forEach(k=>{
-          const days = daysOfWeek(k);
-          const tasks = days.flatMap(d=>getAllDay(d));
-          const r = rateOf(tasks);
-          const li=document.createElement("li");
-          li.className="rowItem compact";
-          li.innerHTML = `
-            <div class="left">
-              <div class="title">${weekRangeLabel(k)}</div>
-            </div>
-            <div class="right muted">${r===null ? "" : r+"%"}</div>
-          `;
-          li.addEventListener("click", ()=>{ selectedWeekKey = k; show("weekly"); });
-          weeksUl.appendChild(li);
-        });
-      }
-    }
-
-    if(daysUl){
-      clear(daysUl);
-      const keys = new Set([
-        ...Object.keys(store.plan||{}),
-        ...Object.keys(store.manual||{}),
-        ...Object.keys(store.logs||{})
-      ]);
-      const list = [...keys].sort().reverse().slice(0, 14);
-      if(list.length===0){
-        const li=document.createElement("li"); li.className="empty"; li.textContent="まだ日次データがありません。";
-        daysUl.appendChild(li);
-      } else {
-        list.forEach(d=>{
-          const tasks = getAllDay(d);
-          const r = rateOf(tasks);
-          const li=document.createElement("li");
-          li.className="rowItem compact";
-          li.innerHTML = `
-            <div class="left">
-              <div class="title">${d}</div>
-            </div>
-            <div class="right muted">${r===null ? "" : r+"%"}</div>
-          `;
-          li.addEventListener("click", ()=>{ selectedDayKey = d; show("daily"); });
-          daysUl.appendChild(li);
-        });
-      }
-    }
-  }
-
-  function render(){
-    // view-specific
-    if(!el("daily")) return; // HTML未読込保険
-
-    // tab view
-    if(!el("daily").hidden) renderDaily();
-    if(!el("weekly").hidden) renderWeekly();
-    if(!el("master").hidden) renderMaster();
-    if(!el("calendar").hidden) renderCalendar();
-    if(!el("history").hidden) renderHistory();
-
-    // settings gear button
-    // (HTML側で onclick してなくても動くように)
-  }
-
-  // ===== HTML actions: minutes =====
-  function addMinutes(){
-    const input = el("minsInput");
-    const v = (input?.value || "").trim();
-    const mins = clampInt(v || "0", 0, 100000);
-    if(input) input.value = "";
-    if(mins<=0) return;
-    addStudyMin(selectedDayKey, mins);
-    save();
-  }
-  function resetDayMinutes(){
-    if(!confirm("学習時間を0分にしますか？")) return;
-    setStudyMin(selectedDayKey, 0);
-    save();
-  }
-
-  // ===== Navigation functions =====
-  function shiftDay(delta){ selectedDayKey = addDays(selectedDayKey, delta); render(); }
-  function goToday(){ selectedDayKey = todayKey; render(); }
-  function shiftWeek(delta){ selectedWeekKey = addDays(selectedWeekKey, delta*7); render(); }
-  function goThisWeek(){ selectedWeekKey = getMonday(new Date()); render(); }
-  function shiftMonth(delta){ calMonth = addMonths(calMonth, delta); render(); }
-  function goThisMonth(){ const d=new Date(); d.setDate(1); calMonth=d; render(); }
-
-  // ===== Danger zone =====
-  function wipeAll(){
-    if(!confirm("全データ削除しますか？（元に戻せません）")) return;
-    localStorage.removeItem(KEY);
-    location.reload();
-  }
-
-  // Demo seed (optional)
-  function seedDemo(){
-    if(!confirm("USCPAテンプレを入れますか？（既存は残ります）")) return;
-    const templates = [
-      ["FAR Unit 1 講義", "講義", 180],
-      ["FAR Unit 1 演習", "演習", 120],
-      ["FAR Unit 2 講義", "講義", 180],
-      ["FAR Unit 2 演習", "演習", 120],
-      ["AUD Unit 1 講義", "講義", 150],
-      ["AUD Unit 1 演習", "演習", 120],
-    ];
-    templates.forEach(([title,type,estMin])=>{
-      store.master.push({
-        id: uid("m"),
-        title, type, estMin,
-        notes:"",
-        done:false, doneAt:null,
-        createdAt: iso(new Date())
-      });
-    });
-    save();
-  }
-
-  // ===== Escape =====
-  function escapeHtml(s){
-    return String(s)
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  // ===== Wire global (onclick from HTML) =====
-  window.show = show;
-
-  window.shiftDay = shiftDay;
-  window.goToday = goToday;
-  window.shiftWeek = shiftWeek;
-  window.goThisWeek = goThisWeek;
-  window.shiftMonth = shiftMonth;
-  window.goThisMonth = goThisMonth;
-
-  window.openSettings = openSettings;
-  window.closeSettings = closeSettings;
-  window.saveSettings = saveSettings;
-
-  window.addMinutes = addMinutes;
-  window.resetDayMinutes = resetDayMinutes;
-
-  window.rebuildAuto = rebuildAuto;
-
-  window.addManualTask = addManualTask;
-  window.addMasterTask = addMasterTask;
-
-  window.seedDemo = seedDemo;
-  window.wipeAll = wipeAll;
-
-  // ===== DOMContentLoaded wiring =====
-  document.addEventListener("DOMContentLoaded", () => {
-    // Gear button
-    const btn = el("btnSettings");
-    if(btn) btn.addEventListener("click", openSettings);
-
-    // Modal overlay click to close (optional)
-    const modal = el("settingsModal");
-    if(modal){
-      // クリック透過バグの最大原因を潰す（JSでも保険）
-      modal.style.pointerEvents = "auto";
-      const card = modal.querySelector(".modalCard");
-      if(card) card.style.pointerEvents = "auto";
-
-      modal.addEventListener("click", (e)=>{
-        // 背景クリックで閉じる
-        if(e.target === modal) closeSettings();
-      });
-    }
-
-    // Deep link
-    const p = new URLSearchParams(location.search);
-    const open = p.get("open");
-    if(open && VIEW_IDS.includes(open)) show(open);
-
-    render();
   });
 
-  // initial
-  render();
+  for(const [mid, firstDay] of Object.entries(firstDateByMaster)){
+    const m = store.master.find(x=>x.id===mid);
+    if(!m) continue;
+    if(m.type !== "講義" && m.type !== "演習") continue;
 
-})();
+    offsets.forEach((k, idx)=>{
+      const rd = addDays(firstDay, k);
+      if(rd < start || rd > end) return;
+
+      store.plan[rd] ||= { auto: [] };
+      const nth = idx + 1;
+      const name = `復習(${nth}回目): ${m.title}（${k}日後）`;
+
+      // 重複防止
+      const exists = (store.plan[rd].auto||[]).some(x =>
+        x.origin==="review" && x.masterId===mid && x.reviewNth===nth
+      );
+      if(exists) return;
+
+      store.plan[rd].auto.push({
+        id: uid("auto"),
+        masterId: mid,
+        title: name,
+        type: "復習",
+        estMin: 20 + idx*5,
+        done: false,
+        origin: "review",
+        reviewNth: nth,
+        reviewOffset: k,
+        locked: false
+      });
+    });
+  }
+
+  save();
+}
+
+// ===== Auto task actions =====
+function toggleAuto(dayIso, autoId){
+  const day = store.plan?.[dayIso];
+  if(!day) return;
+  const t = (day.auto||[]).find(x=>x.id===autoId);
+  if(!t) return;
+  t.done = !t.done;
+  save();
+}
+
+function autoMenu(dayIso, autoId){
+  const day = store.plan?.[dayIso];
+  if(!day) return;
+  const idx = (day.auto||[]).findIndex(x=>x.id===autoId);
+  if(idx < 0) return;
+  const t = day.auto[idx];
+
+  const msg =
+`操作:
+1) 日付移動（YYYY-MM-DD）
+2) 推定分変更
+3) 削除
+4) 手動へ移す（今日の手動へ）
+
+番号を入力`;
+  const n = parseInt(prompt(msg,""),10);
+  if(!Number.isFinite(n)) return;
+
+  if(n===1){
+    const to = prompt("移動先（YYYY-MM-DD）", dayIso);
+    if(!to) return;
+    store.plan[to] ||= { auto: [] };
+    store.plan[to].auto.push(t);
+    day.auto.splice(idx,1);
+    save();
+    return;
+  }
+  if(n===2){
+    const v = prompt("推定分（min）", String(t.estMin||0));
+    if(v===null) return;
+    t.estMin = Math.max(1, parseInt(v,10)||t.estMin);
+    save();
+    return;
+  }
+  if(n===3){
+    if(!confirm("削除しますか？")) return;
+    day.auto.splice(idx,1);
+    save();
+    return;
+  }
+  if(n===4){
+    store.daily[dayIso] ||= [];
+    store.daily[dayIso].push({ text: t.title, done: t.done, type: t.type || "その他" });
+    day.auto.splice(idx,1);
+    save();
+    return;
+  }
+}
+
+// ===== Rendering helpers =====
+function getAutoTasks(dayIso){ return store.plan?.[dayIso]?.auto || []; }
+function getManualTasks(dayIso){ return store.daily?.[dayIso] || []; }
+
+function sumEst(list){ return (list||[]).reduce((a,t)=>a+(Number(t.estMin||0)||0),0); }
+function fmtMin(min){
+  min = Number(min||0)||0;
+  const h = Math.floor(min/60);
+  const m = min%60;
+  if(h<=0) return `${m}m`;
+  if(m===0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+function buildCountdown(){
+  const el = document.getElementById("examCountdown");
+  if(!el) return;
+  const ex = store.settings.examDate;
+  if(!ex){ el.textContent = "試験日 未設定"; return; }
+  const today = todayKey;
+  const diff = Math.round((new Date(ex+"T00:00:00") - new Date(today+"T00:00:00")) / (1000*60*60*24));
+  el.textContent = diff >= 0 ? `Exam in ${diff} days` : `Exam passed`;
+}
+
+// ===== Calendar =====
+const WEEKDAYS = ["月","火","水","木","金","土","日"];
+function rateOfTasks(list){
+  if(!list || list.length===0) return null;
+  const done = list.filter(t=>t.done).length;
+  return Math.round(done/list.length*100);
+}
+function heatClass(rate){
+  if(rate===null) return "r0";
+  if(rate===0) return "r0";
+  if(rate<50) return "r1";
+  if(rate<80) return "r2";
+  return "r3";
+}
+function renderCalendar(){
+  const grid = document.getElementById("calendarGrid");
+  if(!grid) return;
+
+  const y = calMonth.getFullYear();
+  const m = calMonth.getMonth();
+  const lab = document.getElementById("calMonthLabel");
+  if(lab) lab.textContent = `${y}年 ${m+1}月`;
+
+  grid.innerHTML = "";
+  WEEKDAYS.forEach(w=>{
+    const h = document.createElement("div");
+    h.className = "calHead";
+    h.textContent = w;
+    grid.appendChild(h);
+  });
+
+  const first = new Date(y, m, 1);
+  const firstIso = iso(first);
+  const jsDay = first.getDay();
+  const idx = (jsDay + 6) % 7;
+  const startIso = addDays(firstIso, -idx);
+
+  for(let i=0;i<42;i++){
+    const dayIso = addDays(startIso, i);
+    const d = new Date(dayIso + "T12:00:00");
+    const inMonth = d.getMonth() === m;
+
+    const all = [...getAutoTasks(dayIso), ...getManualTasks(dayIso)];
+    const r = rateOfTasks(all);
+
+    const cell = document.createElement("div");
+    cell.className = `calCell ${heatClass(r)} ${inMonth ? "" : "outMonth"} ${dayIso===todayKey ? "todayRing" : ""}`;
+
+    const top = document.createElement("div");
+    top.className = "calTop";
+    const dayNum = document.createElement("span");
+    dayNum.className = "calDay";
+    dayNum.textContent = String(d.getDate());
+    const badge = document.createElement("span");
+    badge.className = "calRate";
+    badge.textContent = r===null ? "" : `${r}%`;
+    top.appendChild(dayNum);
+    top.appendChild(badge);
+
+    const bottom = document.createElement("div");
+    bottom.className = "calRate";
+    const done = all.filter(t=>t.done).length;
+    bottom.textContent = all.length ? `${done}/${all.length}` : "";
+
+    cell.appendChild(top);
+    cell.appendChild(bottom);
+
+    cell.onclick = ()=>{
+      selectedDayKey = dayIso;
+      show("daily");
+    };
+
+    grid.appendChild(cell);
+  }
+}
+
+// ===== Weekly Board =====
+function daysOfWeek(mondayIso){
+  return Array.from({length:7}, (_,i)=>addDays(mondayIso, i));
+}
+
+// ===== Settings modal =====
+function openSettings(){
+  const m = document.getElementById("settingsModal");
+  if(!m) return;
+  m.hidden = false;
+
+  const ex = document.getElementById("examDateInput");
+  const wc = document.getElementById("weeklyCapInput");
+  const ro = document.getElementById("reviewOffsetsInput");
+
+  if(ex) ex.value = store.settings.examDate || "";
+  if(wc) wc.value = String(store.settings.weeklyCapMin || 0);
+  if(ro) ro.value = (store.settings.reviewOffsets||DEFAULT_SETTINGS.reviewOffsets).join(",");
+
+  setTimeout(()=>ex?.focus(), 0);
+}
+function closeSettings(){
+  const m = document.getElementById("settingsModal");
+  if(!m) return;
+  m.hidden = true;
+}
+function parseOffsets(v){
+  if(!v) return DEFAULT_SETTINGS.reviewOffsets.slice();
+  return String(v)
+    .split(/[,\s]+/)
+    .map(x=>parseInt(x,10))
+    .filter(n=>Number.isFinite(n) && n>0)
+    .slice(0, 20);
+}
+function saveSettings(){
+  const ex = document.getElementById("examDateInput")?.value || "";
+  const wc = parseInt(document.getElementById("weeklyCapInput")?.value || "0", 10) || 0;
+  const ro = parseOffsets(document.getElementById("reviewOffsetsInput")?.value || "");
+
+  if(ex) store.settings.examDate = ex;
+  store.settings.weeklyCapMin = Math.max(0, wc);
+  store.settings.reviewOffsets = ro;
+
+  save();
+  closeSettings();
+}
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.saveSettings = saveSettings;
+
+// Settings icon
+document.addEventListener("DOMContentLoaded", ()=>{
+  const btn = document.getElementById("btnSettings");
+  if(btn) btn.addEventListener("click", openSettings);
+});
+
+// ===== Render =====
+function renderDaily(){
+  const elDate = document.getElementById("dailyDate");
+  if(elDate) elDate.textContent = selectedDayKey;
+
+  const auto = getAutoTasks(selectedDayKey);
+  const manual = getManualTasks(selectedDayKey);
+
+  // 今日の自動
+  const autoList = document.getElementById("dailyAutoList");
+  if(autoList){
+    autoList.innerHTML = "";
+    if(auto.length===0){
+      const li = document.createElement("li");
+      li.textContent = "まだ割当がありません（Settings→試験日/週容量→再計算）";
+      li.style.opacity = "0.75";
+      autoList.appendChild(li);
+    }else{
+      auto.forEach(t=>{
+        const li = document.createElement("li");
+
+        const left = document.createElement("span");
+        const nth = (t.origin==="review" && t.reviewNth) ? `(${t.reviewNth}回目)` : "";
+        left.textContent = `【${t.type}】 ${t.title} ${nth} • ${t.estMin||0}m`;
+        if(t.done) left.className = "done";
+
+        const right = document.createElement("span");
+        right.textContent = t.done ? "✓" : "";
+
+        li.appendChild(left);
+        li.appendChild(right);
+
+        let pressTimer = null;
+        let longPressed = false;
+        li.addEventListener("pointerdown", ()=>{
+          longPressed = false;
+          pressTimer = setTimeout(()=>{
+            longPressed = true;
+            autoMenu(selectedDayKey, t.id);
+          }, 550);
+        });
+        li.addEventListener("pointerup", ()=>{
+          if(pressTimer) clearTimeout(pressTimer);
+          if(!longPressed) toggleAuto(selectedDayKey, t.id);
+        });
+        li.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
+
+        autoList.appendChild(li);
+      });
+    }
+  }
+
+  // 今日の手動
+  const manList = document.getElementById("dailyManualList");
+  if(manList){
+    manList.innerHTML = "";
+    if(manual.length===0){
+      const li = document.createElement("li");
+      li.textContent = "手動タスクはまだありません";
+      li.style.opacity = "0.75";
+      manList.appendChild(li);
+    }else{
+      manual.forEach((t,i)=>{
+        const li = document.createElement("li");
+
+        const left = document.createElement("span");
+        left.textContent = `【${t.type||"その他"}】 ${t.text}`;
+        if(t.done) left.className = "done";
+
+        const right = document.createElement("span");
+        right.textContent = t.done ? "✓" : "";
+
+        li.appendChild(left);
+        li.appendChild(right);
+
+        let pressTimer=null, longPressed=false;
+        li.addEventListener("pointerdown", ()=>{
+          longPressed=false;
+          pressTimer=setTimeout(()=>{
+            longPressed=true;
+            deleteManual(selectedDayKey, i);
+          }, 550);
+        });
+        li.addEventListener("pointerup", ()=>{
+          if(pressTimer) clearTimeout(pressTimer);
+          if(!longPressed) toggleManual(selectedDayKey, i);
+        });
+        li.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
+
+        manList.appendChild(li);
+      });
+    }
+  }
+
+  // 学習時間
+  const todayMin = document.getElementById("todayMinutes");
+  if(todayMin) todayMin.textContent = `Today: ${getStudyMin(selectedDayKey)} min`;
+
+  // 復習ヒント：今日の復習だけ抜く
+  const reviewList = document.getElementById("todayReviewList");
+  const hint = document.getElementById("reviewHint");
+  if(reviewList){
+    const reviews = auto.filter(t=>t.origin==="review");
+    reviewList.innerHTML = "";
+    if(reviews.length===0){
+      const li = document.createElement("li");
+      li.textContent = "今日の復習はありません";
+      li.style.opacity="0.75";
+      reviewList.appendChild(li);
+      if(hint) hint.textContent = "—";
+    }else{
+      if(hint) hint.textContent = `${reviews.length} items`;
+      reviews.forEach(t=>{
+        const li = document.createElement("li");
+        const left = document.createElement("span");
+        left.textContent = `復習(${t.reviewNth||""}回目) • ${t.estMin||0}m — ${t.title.replace(/^復習$begin:math:text$\\d\+回目$end:math:text$:\s*/,"")}`;
+        if(t.done) left.className="done";
+        const right = document.createElement("span");
+        right.textContent = t.done ? "✓" : "";
+        li.appendChild(left); li.appendChild(right);
+
+        let pressTimer=null, longPressed=false;
+        li.addEventListener("pointerdown", ()=>{
+          longPressed=false;
+          pressTimer=setTimeout(()=>{ longPressed=true; autoMenu(selectedDayKey, t.id); }, 550);
+        });
+        li.addEventListener("pointerup", ()=>{
+          if(pressTimer) clearTimeout(pressTimer);
+          if(!longPressed) toggleAuto(selectedDayKey, t.id);
+        });
+        li.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
+
+        reviewList.appendChild(li);
+      });
+    }
+  }
+
+  // daily meta（達成率/分）
+  const meta = document.getElementById("dailyMeta");
+  if(meta){
+    const all = [...auto, ...manual];
+    const r = rateOfTasks(all);
+    meta.textContent = `達成率: ${r===null?"—":r+"%"} • 自動${auto.filter(x=>x.done).length}/${auto.length} • 手動${manual.filter(x=>x.done).length}/${manual.length} • Study ${getStudyMin(selectedDayKey)}m`;
+  }
+}
+
+function renderWeekly(){
+  const label = document.getElementById("weekLabel");
+  if(label) label.textContent = `Week: ${selectedWeekKey} 〜 ${addDays(selectedWeekKey,6)}`;
+
+  const days = daysOfWeek(selectedWeekKey);
+  const board = document.getElementById("weeklyAutoBoard");
+  if(board){
+    board.innerHTML = "";
+    days.forEach(d=>{
+      const card = document.createElement("div");
+      card.className = "boardCol";
+      const head = document.createElement("div");
+      head.className = "boardHead";
+      const tasks = getAutoTasks(d);
+      head.textContent = `${d.slice(5)} • ${tasks.filter(x=>x.done).length}/${tasks.length}`;
+      card.appendChild(head);
+
+      if(tasks.length===0){
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.style.padding="10px";
+        empty.textContent = "—";
+        card.appendChild(empty);
+      }else{
+        tasks.forEach(t=>{
+          const row = document.createElement("div");
+          row.className = "boardItem";
+          row.textContent = `【${t.type}】 ${t.title} (${t.estMin||0}m)`;
+          if(t.done) row.classList.add("done");
+
+          let pressTimer=null, longPressed=false;
+          row.addEventListener("pointerdown", ()=>{
+            longPressed=false;
+            pressTimer=setTimeout(()=>{ longPressed=true; autoMenu(d, t.id); }, 550);
+          });
+          row.addEventListener("pointerup", ()=>{
+            if(pressTimer) clearTimeout(pressTimer);
+            if(!longPressed) toggleAuto(d, t.id);
+          });
+          row.addEventListener("pointerleave", ()=>{ if(pressTimer) clearTimeout(pressTimer); });
+
+          card.appendChild(row);
+        });
+      }
+      board.appendChild(card);
+    });
+  }
+
+  // KPI
+  const capEl = document.getElementById("weeklyCap");
+  const assignedEl = document.getElementById("weeklyAssigned");
+  const remainEl = document.getElementById("weeklyRemain");
+
+  const cap = Number(store.settings.weeklyCapMin||0)||0;
+  const assigned = days.reduce((a,d)=>a+sumEst(getAutoTasks(d)),0);
+  const remain = cap - assigned;
+
+  if(capEl) capEl.textContent = fmtMin(cap);
+  if(assignedEl) assignedEl.textContent = fmtMin(assigned);
+  if(remainEl) remainEl.textContent = fmtMin(remain);
+}
+
+function renderMaster(){
+  const list = document.getElementById("masterList");
+  if(!list) return;
+
+  const q = (document.getElementById("masterSearch")?.value || "").trim().toLowerCase();
+  const filter = document.getElementById("masterFilter")?.value || "all";
+
+  let items = [...(store.master||[])];
+  if(q){
+    items = items.filter(m =>
+      (m.title||"").toLowerCase().includes(q) ||
+      (m.notes||"").toLowerCase().includes(q) ||
+      (m.type||"").toLowerCase().includes(q)
+    );
+  }
+  if(filter==="open") items = items.filter(m=>!m.done);
+  if(filter==="done") items = items.filter(m=>m.done);
+
+  list.innerHTML = "";
+  if(items.length===0){
+    const li = document.createElement("li");
+    li.textContent = "Masterタスクがありません";
+    li.style.opacity="0.75";
+    list.appendChild(li);
+    return;
+  }
+
+  items.forEach(m=>{
+    const li = document.createElement("li");
+    const left = document.createElement("span");
+    left.textContent = `【${m.type}】 ${m.title} • ${fmtMin(m.estMin)}${m.notes?` • ${m.notes}`:""}`;
+    if(m.done) left.className="done";
+
+    const right = document.createElement("span");
+    right.textContent = m.done ? "✓" : "";
+
+    li.appendChild(left);
+    li.appendChild(right);
+
+    li.addEventListener("click", ()=>{
+      // 簡易編集メニュー
+      const msg =
+`操作:
+1) 完了/未完了
+2) 推定分変更
+3) タイトル変更
+4) 削除
+
+番号を入力`;
+      const n = parseInt(prompt(msg,""),10);
+      if(!Number.isFinite(n)) return;
+
+      if(n===1){
+        m.done = !m.done;
+        m.doneAt = m.done ? iso(new Date()) : null;
+        save(); return;
+      }
+      if(n===2){
+        const v = prompt("推定分(min)", String(m.estMin||0));
+        if(v===null) return;
+        m.estMin = Math.max(1, parseInt(v,10)||m.estMin);
+        save(); return;
+      }
+      if(n===3){
+        const v = prompt("タイトル", m.title);
+        if(!v) return;
+        m.title = v;
+        save(); return;
+      }
+      if(n===4){
+        if(!confirm("削除しますか？")) return;
+        store.master = store.master.filter(x=>x.id!==m.id);
+        save(); return;
+      }
+    });
+
+    list.appendChild(li);
+  });
+}
+
+function renderHistory(){
+  const hw = document.getElementById("historyWeeks");
+  const hd = document.getElementById("historyDays");
+
+  if(hw){
+    hw.innerHTML = "";
+    const weeks = Object.keys(store.weekly||{}).sort().reverse();
+    if(weeks.length===0){
+      const li = document.createElement("li");
+      li.textContent = "週次データなし";
+      li.style.opacity="0.75";
+      hw.appendChild(li);
+    }else{
+      weeks.forEach(w=>{
+        const li = document.createElement("li");
+        li.textContent = `${w} 〜 ${addDays(w,6)}`;
+        li.onclick = ()=>{ selectedWeekKey = w; show("weekly"); };
+        hw.appendChild(li);
+      });
+    }
+  }
+
+  if(hd){
+    hd.innerHTML = "";
+    // 日付は plan/daily/logs のユニオン
+    const set = new Set([
+      ...Object.keys(store.plan||{}),
+      ...Object.keys(store.daily||{}),
+      ...Object.keys(store.logs||{})
+    ]);
+    const days = [...set].sort().slice(-14).reverse();
+    if(days.length===0){
+      const li = document.createElement("li");
+      li.textContent = "日次データなし";
+      li.style.opacity="0.75";
+      hd.appendChild(li);
+    }else{
+      days.forEach(d=>{
+        const all = [...getAutoTasks(d), ...getManualTasks(d)];
+        const r = rateOfTasks(all);
+        const li = document.createElement("li");
+        li.textContent = `${d} • ${r===null?"—":r+"%"} • Study ${getStudyMin(d)}m`;
+        li.onclick = ()=>{ selectedDayKey = d; show("daily"); };
+        hd.appendChild(li);
+      });
+    }
+  }
+}
+
+function render(){
+  // countdown
+  buildCountdown();
+
+  // ensure weekly container exists
+  store.weekly[selectedWeekKey] ||= { tasks: [] };
+
+  renderDaily();
+  renderWeekly();
+  renderMaster();
+  renderCalendar();
+  renderHistory();
+}
+
+// ===== Notify (optional nudge) =====
+function nightlyNudge(){
+  const hour = new Date().getHours();
+  if(hour < 20) return;
+  const nudgedKey = "nudged_" + todayKey;
+  if(localStorage.getItem(nudgedKey) === "1") return;
+
+  const all = [...getAutoTasks(todayKey), ...getManualTasks(todayKey)];
+  if(all.length === 0) return;
+
+  const r = rateOfTasks(all);
+  if(r===null) return;
+  localStorage.setItem(nudgedKey, "1");
+  const undone = all.filter(t=>!t.done).length;
+  alert(undone>0 ? `今日は ${r}%（未完了 ${undone}）。1つだけ回収しよう。` : `今日は ${r}%！おつかれ。`);
+}
+
+// ===== Hook Pro HTML buttons =====
+document.addEventListener("DOMContentLoaded", ()=>{
+  // 初期：daily表示
+  show("daily");
+  // 1回だけ：未設定なら勝手に再計算しない（ユーザーが押す）
+  nightlyNudge();
+});
+
+// ===== Expose for inline onclick =====
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.saveSettings = saveSettings;
+window.rebuildAuto = rebuildAuto;
+
+// ここでPro HTMLにある操作ボタンが使えるように公開
+window.seedDemo = seedDemo;
+window.wipeAll = wipeAll;
+window.seedFARChapters = seedFARChapters;
+window.seedFARWithMinutes = seedFARWithMinutes;
+
+// 初回描画
+render();
