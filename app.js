@@ -1320,6 +1320,125 @@ window.clearDone = clearDone;
 window.requestNotif = requestNotif;
 window.testNotif = testNotif;
 
+// ===== Settings Modal Wiring (PRO UI compatible) =====
+function parseDateInput(v){
+  if(!v) return null;
+  const s = String(v).trim().replaceAll("/", "-");
+  // allow YYYY-M-D too
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(!m) return null;
+  const yyyy = m[1];
+  const mm = String(m[2]).padStart(2,"0");
+  const dd = String(m[3]).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseOffsetsInput(v){
+  if(!v) return [1,3,7,14];
+  return String(v)
+    .split(/[,\s]+/)
+    .map(x => parseInt(x,10))
+    .filter(n => Number.isFinite(n) && n > 0)
+    .slice(0, 12);
+}
+
+function closeSettingsModal(modal){
+  if(!modal) return;
+  // どの実装でも閉じられるように雑に対応
+  modal.classList.remove("open", "show", "is-open");
+  modal.setAttribute("aria-hidden", "true");
+  modal.style.display = "none";
+}
+
+function wireSettingsModal(){
+  // モーダル自体（どれか見つかればOK）
+  const modal =
+    document.getElementById("settingsModal") ||
+    document.querySelector('[data-modal="settings"]') ||
+    document.querySelector(".modal.settings") ||
+    document.querySelector(".modal[aria-label='Settings']") ||
+    document.querySelector(".modal");
+
+  // 入力（id/name/data-* 何でも拾う）
+  const examInput =
+    document.getElementById("settingsExamDate") ||
+    document.querySelector('[name="examDate"]') ||
+    document.querySelector('[data-field="examDate"]') ||
+    document.querySelector('input[type="date"]') ||
+    document.querySelector('input[placeholder*="2026"]');
+
+  const weeklyMinInput =
+    document.getElementById("settingsWeeklyMinutes") ||
+    document.querySelector('[name="weeklyMinutes"]') ||
+    document.querySelector('[data-field="weeklyMinutes"]') ||
+    document.querySelector('input[inputmode="numeric"]') ||
+    document.querySelector('input[placeholder*="3000"]');
+
+  const offsetsInput =
+    document.getElementById("settingsReviewOffsets") ||
+    document.querySelector('[name="reviewOffsets"]') ||
+    document.querySelector('[data-field="reviewOffsets"]') ||
+    document.querySelector('input[placeholder*="1,3,7,14"]');
+
+  // ボタン
+  const saveBtn =
+    document.getElementById("settingsSaveBtn") ||
+    document.querySelector('[data-action="save-settings"]') ||
+    Array.from(document.querySelectorAll("button")).find(b => b.textContent.trim() === "保存");
+
+  const closeBtn =
+    document.getElementById("settingsCloseBtn") ||
+    document.querySelector('[data-action="close-settings"]') ||
+    Array.from(document.querySelectorAll("button")).find(b => b.textContent.trim() === "閉じる");
+
+  if(saveBtn && !saveBtn.__wired){
+    saveBtn.__wired = true;
+    saveBtn.addEventListener("click", (e)=>{
+      e.preventDefault();
+
+      const examRaw = examInput ? examInput.value : "";
+      const examIso = parseDateInput(examRaw);
+
+      const weeklyRaw = weeklyMinInput ? weeklyMinInput.value : "";
+      const weeklyMin = Math.max(0, parseInt(weeklyRaw,10) || 0);
+
+      const offRaw = offsetsInput ? offsetsInput.value : "";
+      const offsets = parseOffsetsInput(offRaw);
+
+      // ここが保存の本体
+      store.settings ||= {};
+      if(examIso) store.settings.examDate = examIso; // YYYY-MM-DD
+      // 週の学習可能時間（分）UI想定なら minutes を優先し、hoursにも同期
+      store.settings.weeklyMinutes = weeklyMin;
+      store.settings.weeklyHours = weeklyMin / 60;
+
+      store.settings.reviewOffsets = offsets;
+
+      save(); // localStorageへ + 再描画
+
+      // UX
+      if(saveBtn) saveBtn.textContent = "保存しました";
+      setTimeout(()=>{ if(saveBtn) saveBtn.textContent = "保存"; }, 700);
+
+      // モーダル閉じる（必要なら）
+      closeSettingsModal(modal);
+    });
+  }
+
+  if(closeBtn && !closeBtn.__wired){
+    closeBtn.__wired = true;
+    closeBtn.addEventListener("click", (e)=>{
+      e.preventDefault();
+      closeSettingsModal(modal);
+    });
+  }
+}
+
+// render前後どっちでもOKだけど、確実に一回配線
+document.addEventListener("DOMContentLoaded", ()=>{
+  wireSettingsModal();
+});
+
 // ===== Run =====
 render();
 nightlyNudge();
