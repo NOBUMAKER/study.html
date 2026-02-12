@@ -1490,23 +1490,20 @@ function saveSettings(){
   const offsets = parseOffsets(offEl?.value || "");
 
   if(exam) store.settings.examDate = exam;
+
+  // ✅ minutes を主としつつ、hours に同期（自動割当が weeklyHours を使うため）
   store.settings.weeklyMinutes = weeklyMin;
+  store.settings.weeklyHours = weeklyMin / 60;
+
   store.settings.reviewOffsets = offsets;
 
-  save();          // localStorage保存 + render()
-  if(typeof rebuildAuto === "function") rebuildAuto(); // 自動割当があるなら更新
+  save();                 // localStorage保存 + render()
+  generateAutoPlan?.();   // ✅ 再計算（ある場合だけ）
   closeSettings();
 }
 
-// ヘッダーの⚙︎ボタンにも紐付け（onclick無しでも動く）
-document.addEventListener("DOMContentLoaded", ()=>{
-  const btn = document.getElementById("btnSettings");
-  if(btn) btn.addEventListener("click", openSettings);
-});
-
-
 // ===== Manual minutes (match your HTML: onclick="addMinutes()") =====
-// 以前の addMinutes(mins) 仕様でも壊れないように両対応
+// 引数あり(+15等) / 引数なし(入力欄)の両対応
 function addMinutes(mins){
   let add = mins;
 
@@ -1514,25 +1511,36 @@ function addMinutes(mins){
   if(add === undefined){
     const el = document.getElementById("minsInput");
     add = parseInt(el?.value || "0", 10) || 0;
-    if(el) el.value = ""; // 入力欄クリア
+    if(el) el.value = "";
   }
 
   add = Math.max(0, parseInt(add,10) || 0);
   if(add <= 0) return;
 
   const key = (typeof selectedDayKey === "string" ? selectedDayKey : iso(new Date()));
-  store.dailyTime ||= {};
-  store.dailyTime[key] = (store.dailyTime[key] || 0) + add;
+
+  // ✅ v3 正式：logs に加算
+  store.logs ||= {};
+  store.logs[key] ||= { studyMin: 0 };
+  store.logs[key].studyMin = (Number(store.logs[key].studyMin) || 0) + add;
+
   save();
 }
 
 function resetDayMinutes(){
   const key = (typeof selectedDayKey === "string" ? selectedDayKey : iso(new Date()));
-  store.dailyTime ||= {};
-  store.dailyTime[key] = 0;
+  store.logs ||= {};
+  store.logs[key] ||= { studyMin: 0 };
+  store.logs[key].studyMin = 0;
   save();
 }
 
+// HTMLから呼べるように（安全）
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.saveSettings = saveSettings;
+window.addMinutes = addMinutes;
+window.resetDayMinutes = resetDayMinutes;
 // HTMLから呼べるように（安全）
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;
