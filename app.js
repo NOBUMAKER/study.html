@@ -1415,6 +1415,18 @@ window.clearDone = clearDone;
 window.requestNotif = requestNotif;
 window.testNotif = testNotif;
 
+// USCPA試験日設定
+const EXAM_DATE = "2025-08-15";
+
+function updateCountdown(){
+  const today = new Date();
+  const exam = new Date(EXAM_DATE);
+  const diff = Math.ceil((exam - today) / (1000*60*60*24));
+  const el = document.getElementById("examCountdown");
+  if(el) el.textContent = `試験まで ${diff}日`;
+}
+updateCountdown();
+
 // ===== Run =====
 render();
 nightlyNudge();
