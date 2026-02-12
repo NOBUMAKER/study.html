@@ -16,28 +16,23 @@
     </div>
 
     <div class="headerRight">
-      <div class="pill" id="examCountdown">—</div>
-      <button class="iconBtn" id="btnSettings" title="Settings">⚙︎</button>
+      <div class="pill" id="examCountdown">Exam: —</div>
+      <button class="iconBtn" id="btnSettings" title="Settings" type="button">⚙︎</button>
     </div>
   </header>
 
   <main class="shell">
     <aside class="sidebar">
-      <button class="nav active" id="tabDaily" onclick="show('daily')">Today</button>
-      <button class="nav" id="tabWeekly" onclick="show('weekly')">Week</button>
-      <button class="nav" id="tabMaster" onclick="show('master')">Master</button>
-      <button class="nav" id="tabCalendar" onclick="show('calendar')">Calendar</button>
-      <button class="nav" id="tabHistory" onclick="show('history')">History</button>
+      <button class="nav active" id="tabDaily" type="button" onclick="show('daily')">Today</button>
+      <button class="nav" id="tabWeekly" type="button" onclick="show('weekly')">Week</button>
+      <button class="nav" id="tabMaster" type="button" onclick="show('master')">Master</button>
+      <button class="nav" id="tabCalendar" type="button" onclick="show('calendar')">Calendar</button>
+      <button class="nav" id="tabHistory" type="button" onclick="show('history')">History</button>
     </aside>
 
     <section class="content">
 
       <!-- ===== DAILY ===== -->
-      <div class="bulkBar">
-  <button class="btn ghost" onclick="bulkComplete()">✓ 一括完了</button>
-  <button class="btn ghost danger" onclick="bulkDelete()">🗑 一括削除</button>
-  <button class="btn ghost" onclick="bulkMoveTomorrow()">→ 明日に移動</button>
-</div>
       <section id="daily" class="view">
         <div class="row between">
           <div>
@@ -45,9 +40,9 @@
             <div class="muted" id="dailyMeta">—</div>
           </div>
           <div class="row gap8">
-            <button class="btn ghost" onclick="shiftDay(-1)">◀</button>
-            <button class="btn ghost" onclick="goToday()">Today</button>
-            <button class="btn ghost" onclick="shiftDay(1)">▶</button>
+            <button class="btn ghost" type="button" onclick="shiftDay(-1)">◀</button>
+            <button class="btn ghost" type="button" onclick="goToday()">Today</button>
+            <button class="btn ghost" type="button" onclick="shiftDay(1)">▶</button>
           </div>
         </div>
 
@@ -55,23 +50,22 @@
           <div class="card">
             <div class="cardTop between">
               <div>
-                <div class="h2">今日の割当（自動）</div>
-                <div class="muted">週の学習可能時間から自動生成</div>
+                <div class="h2">今日（今週から来たタスク）</div>
+                <div class="muted">Weekで「今週→今日以降へ振り分け」を押すとここに来ます</div>
               </div>
-              <button class="btn" onclick="rebuildAuto()">再計算</button>
             </div>
             <ul id="dailyAutoList" class="list"></ul>
-            <div class="foot muted">タップで完了 / 右の ✎ で編集 / 🗑 で削除（自動でもOK）</div>
           </div>
 
           <div class="card">
             <div class="cardTop between">
               <div>
-                <div class="h2">今日の追加（手動）</div>
+                <div class="h2">今日（手動タスク）</div>
                 <div class="muted">思いついた作業・急ぎタスク</div>
               </div>
-              <button class="btn primary" onclick="addManualTask()">＋追加</button>
+              <button class="btn primary" type="button" onclick="addManualTask()">＋追加</button>
             </div>
+
             <ul id="dailyManualList" class="list"></ul>
 
             <div class="divider"></div>
@@ -79,14 +73,15 @@
             <div class="row between">
               <div>
                 <div class="h2">学習時間（手動）</div>
-                <div class="muted">タイマーなし。分数を入力して加算。</div>
+                <div class="muted">分数を入力して加算</div>
               </div>
-              <button class="btn ghost danger" onclick="resetDayMinutes()">0にする</button>
+              <button class="btn ghost danger" type="button" onclick="resetDayMinutes()">0にする</button>
             </div>
+
             <div class="row gap8">
               <input class="input" id="minsInput" inputmode="numeric" placeholder="例: 90" />
-              <button class="btn" onclick="addMinutes()">加算</button>
-              <div class="pill" id="todayMinutes">—</div>
+              <button class="btn" type="button" onclick="addMinutes()">加算</button>
+              <div class="pill" id="todayMinutes">学習時間 —</div>
             </div>
           </div>
         </div>
@@ -94,8 +89,8 @@
         <div class="card">
           <div class="cardTop between">
             <div>
-              <div class="h2">復習のタイミング（自動）</div>
-              <div class="muted">完了した学習タスクから 1/3/7/14日後に自動生成</div>
+              <div class="h2">復習のタイミング（提案）</div>
+              <div class="muted">講義/演習を完了すると、1/3/7/14日後の復習候補が出ます（回数も表示）</div>
             </div>
             <div class="pill" id="reviewHint">—</div>
           </div>
@@ -111,9 +106,9 @@
             <div class="muted" id="weekMeta">—</div>
           </div>
           <div class="row gap8">
-            <button class="btn ghost" onclick="shiftWeek(-1)">◀</button>
-            <button class="btn ghost" onclick="goThisWeek()">This week</button>
-            <button class="btn ghost" onclick="shiftWeek(1)">▶</button>
+            <button class="btn ghost" type="button" onclick="shiftWeek(-1)">◀</button>
+            <button class="btn ghost" type="button" onclick="goThisWeek()">This week</button>
+            <button class="btn ghost" type="button" onclick="shiftWeek(1)">▶</button>
           </div>
         </div>
 
@@ -121,29 +116,31 @@
           <div class="card">
             <div class="cardTop between">
               <div>
-                <div class="h2">今週の割当（自動）</div>
-                <div class="muted">日ごとの割当をまとめて見える化</div>
+                <div class="h2">今週タスク</div>
+                <div class="muted">Masterから積む → まとめて今日以降に振り分け</div>
               </div>
-              <button class="btn" onclick="rebuildAuto()">再計算</button>
             </div>
+
+            <!-- 操作はJSがこの中にボタンを差し込みます（weeklyAutoBoard） -->
             <div id="weeklyAutoBoard" class="board"></div>
           </div>
 
           <div class="card">
             <div class="cardTop between">
               <div>
-                <div class="h2">今週の容量</div>
-                <div class="muted">週の勉強可能時間（分）を設定</div>
+                <div class="h2">設定 / 容量</div>
+                <div class="muted">週の容量（分）や試験日、復習間隔</div>
               </div>
-              <button class="btn" onclick="openSettings()">設定</button>
+              <button class="btn" type="button" onclick="openSettings()">設定</button>
             </div>
+
             <div class="kpi">
               <div class="kpiItem">
                 <div class="label">週の容量</div>
                 <div class="value" id="weeklyCap">—</div>
               </div>
               <div class="kpiItem">
-                <div class="label">今週の割当</div>
+                <div class="label">未完了の推定</div>
                 <div class="value" id="weeklyAssigned">—</div>
               </div>
               <div class="kpiItem">
@@ -153,12 +150,10 @@
             </div>
 
             <div class="divider"></div>
+            <div class="muted">※ 自動割り当ては使いません（あなたの運用に合わせてシンプルに）。</div>
 
-            <div class="h2">操作</div>
-            <div class="muted">割当後もタスクは自由に編集できます。</div>
-            <div class="row gap8">
-              <button class="btn primary" onclick="seedDemo()">USCPAテンプレ投入</button>
-              <button class="btn ghost danger" onclick="wipeAll()">全データ削除</button>
+            <div class="row gap8" style="margin-top:10px; flex-wrap:wrap;">
+              <button class="btn ghost danger" type="button" onclick="wipeAll()">全データ削除</button>
             </div>
           </div>
         </div>
@@ -168,20 +163,13 @@
       <section id="master" class="view" hidden>
         <div class="row between">
           <div>
-            <div class="h1">Master Tasks</div>
-            <div class="muted">試験までの全タスク（推定時間つき）→ 自動割当の母体</div>
+            <div class="h1">Master</div>
+            <div class="muted">全タスクの母体（チェックして今週に積めます）</div>
           </div>
           <div class="row gap8">
-            <button class="btn primary" onclick="addMasterTask()">＋追加</button>
-            <button class="btn" onclick="rebuildAuto()">自動割当を更新</button>
+            <button class="btn primary" type="button" onclick="addMasterTask()">＋Master追加</button>
+            <button class="btn" type="button" onclick="openWeeklyPickMaster()">選択 → 今週へ追加</button>
           </div>
-          <div class="row gap8">
-  <button class="btn primary" onclick="addMasterTask()">＋追加</button>
-  <button class="btn" onclick="rebuildAuto()">自動割当を更新</button>
-  <button class="btn ghost" onclick="selectAllMasters()">全選択</button>
-  <button class="btn ghost" onclick="clearMasterSelection()">解除</button>
-  <button class="btn danger" onclick="deleteSelectedMasters()">一括削除</button>
-</div>
         </div>
 
         <div class="card">
@@ -193,6 +181,7 @@
               <option value="done">完了</option>
             </select>
           </div>
+
           <ul id="masterList" class="list"></ul>
         </div>
       </section>
@@ -202,15 +191,19 @@
         <div class="row between">
           <div>
             <div class="h1" id="calMonthLabel">—</div>
-            <div class="muted">色は「その日の達成率（自動+手動の完了割合）」</div>
+            <div class="muted">色は「その日の達成率（完了割合）」</div>
           </div>
           <div class="row gap8">
-            <button class="btn ghost" onclick="shiftMonth(-1)">◀</button>
-            <button class="btn ghost" onclick="goThisMonth()">This month</button>
-            <button class="btn ghost" onclick="shiftMonth(1)">▶</button>
+            <button class="btn ghost" type="button" onclick="shiftMonth(-1)">◀</button>
+            <button class="btn ghost" type="button" onclick="goThisMonth()">This month</button>
+            <button class="btn ghost" type="button" onclick="shiftMonth(1)">▶</button>
           </div>
         </div>
-        <div id="calendarGrid" class="calendar"></div>
+
+        <!-- ★カレンダーが出ない対策：必ず描画領域を確保 -->
+        <div class="card">
+          <div id="calendarGrid" class="calendar"></div>
+        </div>
       </section>
 
       <!-- ===== HISTORY ===== -->
@@ -218,7 +211,7 @@
         <div class="row between">
           <div>
             <div class="h1">History</div>
-            <div class="muted">過去の週・日を確認</div>
+            <div class="muted">過去の週・日</div>
           </div>
         </div>
 
@@ -227,6 +220,7 @@
             <div class="h2">週</div>
             <ul id="historyWeeks" class="list compact"></ul>
           </div>
+
           <div class="card">
             <div class="h2">日（直近14日）</div>
             <ul id="historyDays" class="list compact"></ul>
@@ -238,21 +232,6 @@
   </main>
 
   <!-- ===== SETTINGS MODAL ===== -->
-  <div class="divider"></div>
-
-<div class="h2">バックアップ</div>
-<div class="row gap8">
-  <button class="btn" onclick="exportBackup()">書き出し（JSON）</button>
-
-  <label class="btn ghost" style="cursor:pointer;">
-    復元（JSON）
-    <input type="file" accept="application/json" hidden
-      onchange="importBackup(this.files[0])" />
-  </label>
-
-  <button class="btn ghost danger" onclick="restoreFromSnapshot()">スナップショット復元</button>
-</div>
-<p class="muted">※自動スナップショットは端末内。JSON書き出しが一番安全。</p>
   <div class="modal" id="settingsModal" hidden>
     <div class="modalCard">
       <div class="row between">
@@ -260,7 +239,7 @@
           <div class="h2">Settings</div>
           <div class="muted">試験日・週の容量・復習間隔</div>
         </div>
-        <button class="iconBtn" onclick="closeSettings()">✕</button>
+        <button class="iconBtn" type="button" onclick="closeSettings()">✕</button>
       </div>
 
       <div class="form">
@@ -270,7 +249,7 @@
         </label>
 
         <label class="field">
-          <span>週の学習可能時間（分）</span>
+          <span>週の容量（分）</span>
           <input class="input" id="weeklyCapInput" inputmode="numeric" placeholder="例: 900（=15時間）" />
         </label>
 
@@ -280,8 +259,8 @@
         </label>
 
         <div class="row gap8">
-          <button class="btn primary" onclick="saveSettings()">保存</button>
-          <button class="btn ghost" onclick="closeSettings()">閉じる</button>
+          <button class="btn primary" type="button" onclick="saveSettings()">保存</button>
+          <button class="btn ghost" type="button" onclick="closeSettings()">閉じる</button>
         </div>
       </div>
     </div>
