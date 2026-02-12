@@ -14,7 +14,6 @@
   <div class="tabs">
     <button id="tabDaily" class="tab active" onclick="show('daily')">今日</button>
     <button id="tabWeekly" class="tab" onclick="show('weekly')">今週</button>
-    <button id="tabPlan" class="tab" onclick="show('plan')">計画</button>
     <button id="tabCalendar" class="tab" onclick="show('calendar')">カレンダー</button>
     <button id="tabAnalytics" class="tab" onclick="show('analytics')">グラフ</button>
     <button id="tabHistory" class="tab" onclick="show('history')">履歴</button>
@@ -41,25 +40,31 @@
 
     <ul id="dailyList" class="list"></ul>
 
-    <!-- 学習時間：手動入力のみ -->
+    <!-- ★ 自動：今日の割当 -->
+    <div class="card">
+      <h3>今日の割当（自動）</h3>
+      <div id="dayPlanBox"></div>
+    </div>
+
+    <!-- ★ 手動学習時間（タイマー無し） -->
     <div class="card">
       <h3>学習時間（手動）</h3>
       <div class="row">
         <span id="todayMinutes" class="badge"></span>
-        <span id="todayHours" class="badge"></span>
       </div>
+
       <div class="row">
         <button class="btn tiny secondary" onclick="addMinutes(15)">+15分</button>
         <button class="btn tiny secondary" onclick="addMinutes(30)">+30分</button>
         <button class="btn tiny secondary" onclick="addMinutes(60)">+60分</button>
-        <button class="btn tiny" onclick="promptSetMinutes()">入力</button>
       </div>
+
       <div class="row">
         <button class="btn tiny secondary" onclick="subtractMinutes(15)">-15分</button>
         <button class="btn tiny secondary" onclick="subtractMinutes(30)">-30分</button>
-        <button class="btn tiny danger" onclick="resetTodayTime()">0分にする</button>
+        <button class="btn tiny danger" onclick="resetTodayTime()">この日を0分にする</button>
       </div>
-      <p class="muted">※「入力」はその日の合計分を直接上書きします。</p>
+      <p class="muted">※記録は「その日の合計分」だけ（タスク別には紐づけません）</p>
     </div>
 
     <div class="row">
@@ -118,30 +123,48 @@
       <h3>タイプ別（週次）</h3>
       <div id="weeklyTypeSummary" class="chips"></div>
     </div>
-  </section>
 
-  <!-- 計画 -->
-  <section id="plan" hidden>
-    <div class="row">
-      <h2>計画</h2>
-      <div class="meta">
-        <span id="examDateLabel" class="badge"></span>
-        <span id="examDaysLeft" class="badge"></span>
-      </div>
-    </div>
-
-    <div class="row">
-      <button class="btn" onclick="setExamDate()">試験日を設定</button>
-      <button class="btn secondary" onclick="addMasterTask()">＋ マスタータスク追加</button>
-    </div>
-
+    <!-- ★ Planner（自動割当） -->
     <div class="card">
-      <h3>試験までの全タスク（締切順）</h3>
-      <ul id="masterList" class="list"></ul>
-      <p class="muted">※タップ＝完了/未完了、右クリック(PC)/長押し(スマホ)＝削除</p>
-    </div>
+      <h3>自動割当（試験まで）</h3>
 
-    <p class="muted">※「週」タスクは週次に、「日」タスクは日次に自動で出ます（未完了のみ）。</p>
+      <div class="row">
+        <span id="examDateLabel" class="badge">試験日: 未設定</span>
+        <span id="weeklyCapLabel" class="badge">週の容量: 600分</span>
+      </div>
+
+      <div class="row">
+        <button class="btn tiny secondary" onclick="setExamDate()">試験日設定</button>
+        <button class="btn tiny secondary" onclick="setWeeklyCapacity()">週の容量設定</button>
+        <button class="btn tiny" onclick="addMasterTask()">＋ マスタータスク追加</button>
+      </div>
+
+      <details class="muted">
+        <summary>マスタータスク一覧（短押し=編集 / 長押し=削除）</summary>
+        <ul id="masterList" class="list"></ul>
+        <p class="muted">※推定分・進捗（doneMins）・締切で優先順位が決まります</p>
+      </details>
+
+      <hr />
+
+      <h4>この週の割当</h4>
+      <div id="autoWeekBox"></div>
+
+      <details class="muted">
+        <summary>日割りプレビュー（Mon〜Sun）</summary>
+        <div id="weekDailyPreview"></div>
+      </details>
+
+      <details class="muted">
+        <summary>容量不足（入り切らない分）</summary>
+        <div id="overflowBox"></div>
+      </details>
+
+      <p class="muted">
+        ※「この週の割当」はタップで分数を修正できます（週だけ上書き）<br/>
+        ※「日割り」は各日ごとに編集すると、その日だけ完全上書きになります（A運用）
+      </p>
+    </div>
   </section>
 
   <!-- カレンダー -->
